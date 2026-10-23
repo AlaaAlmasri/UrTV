@@ -181,6 +181,13 @@ yet»), or an old UrTV folder is there without a working `.git`, delete that fol
   `docs/SETTINGS.md` and use its command. Never edit the apps' code, build or install your own APK, or turn the
   automatic update off to make something; if it isn't in `docs/SETTINGS.md`, tell me it isn't in تلفزيونك yet and
   pass my words on in the share message (step 8).
+- **A problem goes to the developer's form, never to GitHub.** When something doesn't work, or I say «بلّغ المطوّر
+  عن مشكلة» (now or any time later, from this computer or another one): look into it first with this prompt's tools,
+  then `optimize/share.sh --preview --problem --agent "<you and your model>" --owner "<my words>" "<what you checked
+  and found, two to five plain lines>"`, show me the whole text, ask «أرسله؟», and only if I say yes
+  `optimize/share.sh --send`. Never open a GitHub issue, discussion, comment or pull request for me, never use `gh`
+  or the GitHub website on my behalf: the developer reads the form, and a GitHub post is public and can carry my
+  details. If the TV doesn't answer, send it anyway: the report says so.
 - Ask me before anything not in this prompt. If something fails twice, and the table's fix didn't help, stop,
   show me the output and propose a fix.
 - Never tell me something worked without its proof: the script's own success line, or a screenshot you looked at.

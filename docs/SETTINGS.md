@@ -15,6 +15,13 @@ something about the screensaver, the home screen or the TV, find it in the table
 - **Not in the tables?** Tell the person, in Arabic, that it isn't in تلفزيونك yet, and that their words can go
   to the developer as a suggestion: add them to the share message at the end (`optimize/share.sh --preview
   --owner "<their words>" …`, see `docs/SETUP-PROMPT.md` step 8). Don't make it yourself.
+- **A problem goes to the developer's form, never to GitHub.** When something doesn't work, or the person says «بلّغ المطوّر
+  عن مشكلة» (now or any time later, from this computer or another one): look into it first with the tools here,
+  then `optimize/share.sh --preview --problem --agent "<you and your model>" --owner "<their words>" "<what you checked
+  and found, two to five plain lines>"`, show the person the whole text, ask «أرسله؟», and only if the person says yes
+  `optimize/share.sh --send`. Never open a GitHub issue, discussion, comment or pull request for the person, never use `gh`
+  or the GitHub website on their behalf: the developer reads the form, and a GitHub post is public and can carry their
+  details. If the TV doesn't answer, send it anyway: the report says so.
 - **Close to one?** Offer the nearest setting (a trip date: the countdown; a darker card: `cardstyle dark1`).
 - **After a change:** read it back (`optimize/saver.sh show`, `optimize/dock.sh show`) and look at a screenshot
   (`optimize/shot.sh screensaver` or `optimize/shot.sh home`, the `-small.png`) before you say it's done.
@@ -97,6 +104,7 @@ something about the screensaver, the home screen or the TV, find it in the table
 | how much memory is free | `optimize/measure.sh after --now` |
 | a screenshot | `optimize/shot.sh home`, `screensaver`, `settings`, `favourites`, `now <name>` |
 | send the developer how it went | `optimize/share.sh --preview …`, then `--send` (`docs/SETUP-PROMPT.md` step 8) |
+| report a problem to the developer («بلّغ المطوّر عن مشكلة») | `optimize/share.sh --preview --problem --owner "<their words>" "<what you checked>"`, show it, then `--send`; never GitHub |
 
 ## Not in تلفزيونك yet (say so, and pass it on with `--owner`)
 

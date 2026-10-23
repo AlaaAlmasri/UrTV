@@ -9,6 +9,12 @@ Nothing personal: no city, clubs, favourites or apps of theirs, no names, networ
     optimize/share.sh --preview --agent "Codex (gpt-…)" --owner "the owner's words, if any" "the agent's notes"
     optimize/share.sh --send
 
+A problem any time later (the owner says «بلّغ المطوّر عن مشكلة», or something broke): --problem marks it as one and
+works without this computer's setup results too (the TV is then read live, if it answers). It goes to the same form:
+the agent never opens a GitHub issue, comment or pull request for the owner.
+
+    optimize/share.sh --preview --problem --agent "…" --owner "what the owner said happened" "what the agent checked"
+
 --preview writes optimize/run/share.md and prints exactly what would be sent; nothing leaves the computer.
 --send sends that file as it is. Without either, it writes and sends in one go (older instructions).
 """
@@ -49,10 +55,26 @@ def scrub(text):   # in case a note or an output carries something personal
 
 
 def tv():
-    props = dict(re.findall(r"^(\S+) = (.*)$", (RUN / "tv.txt").read_text(encoding="utf-8"), re.M))
+    path = RUN / "tv.txt"
+    if path.exists():
+        props = dict(re.findall(r"^(\S+) = (.*)$", path.read_text(encoding="utf-8"), re.M))
+    else:   # set up from another computer: ask the TV itself, if it answers
+        props = live_props()
+        if not props:
+            return "? (not set up from this computer, and the TV did not answer)"
     return (f"{props.get('ro.product.manufacturer', '?')} {props.get('ro.product.model', '?')} "
             f"({props.get('ro.product.device', '?')}), Android {props.get('ro.build.version.release', '?')} "
             f"(SDK {props.get('ro.build.version.sdk', '?')}), firmware {props.get('ro.build.display.id', '?')}")
+
+
+def live_props():
+    """The TV's getprop as {name: value}; {} when it does not answer."""
+    try:
+        out = subprocess.run([sys.executable, "-I", str(Path(__file__).resolve().parent / "tv.py"), "getprop"],
+                             capture_output=True, text=True, timeout=60, env={**os.environ, "TV_TRIES": "1"})
+    except Exception:  # noqa: BLE001
+        return {}
+    return dict(re.findall(r"^\[(ro\.[^\]]+)\]: \[(.*)\]$", out.stdout, re.M)) if out.returncode == 0 else {}
 
 
 def urtv_version():   # this copy of the repo: its last commit
@@ -230,9 +252,8 @@ def hidden(lines):   # the home screen's "package | reason" lines: the owner's o
 
 
 def main():
-    if not (RUN / "tv.txt").exists():
-        sys.exit("!! No setup results here (optimize/run/tv.txt): run the setup first.")
-    a = argparse.ArgumentParser(description="Send the author how the setup went (nothing personal).")
+    a = argparse.ArgumentParser(description="Send the author how the setup went, or a problem (nothing personal).")
+    a.add_argument("--problem", action="store_true", help="a problem report, any time; needs no setup results here")
     a.add_argument("--agent", default="", help="which agent ran the setup, and its model")
     a.add_argument("--owner", default="", help="the owner's own words for the author, if they gave any")
     a.add_argument("notes", nargs="*", help="the agent's notes: what failed or was slow, and what fixed it")
@@ -240,6 +261,9 @@ def main():
     mode.add_argument("--preview", action="store_true", help="write the report and print it; send nothing")
     mode.add_argument("--send", action="store_true", help="send the report --preview wrote")
     args = a.parse_args()
+    if not args.send and not args.problem and not (RUN / "tv.txt").exists():
+        sys.exit("!! No setup results here (optimize/run/tv.txt): run the setup first, "
+                 "or for a problem: optimize/share.sh --preview --problem --owner \"<what happened>\" \"<your notes>\".")
     if args.send:
         if args.notes or args.agent or args.owner:
             sys.exit("!! --send sends the file as --preview wrote it: give the notes to --preview.")
@@ -251,21 +275,15 @@ def main():
     notes = " ".join(args.notes).strip()
     summary = RUN / "summary.md"
     parts = [
-        f"UrTV setup report, {datetime.date.today()}, UrTV {urtv_version()}",
+        f"UrTV {'problem' if args.problem else 'setup'} report, {datetime.date.today()}, UrTV {urtv_version()}",
         "",
         f"TV: {tv()}",
         f"Computer: {computer()}" + (f", agent: {args.agent}" if args.agent else ""),
-        "",
-        "Steps, minutes:seconds:",
-        *steps(),
-        *trouble(),
-        "",
-        "Memory:",
-        *memory(summary),
-        "",
-        "Checks:",
-        *report_checks(),
     ]
+    if (RUN / "tv.txt").exists():
+        parts += ["", "Steps, minutes:seconds:", *steps(), *trouble(), "", "Memory:", *memory(summary), "", "Checks:", *report_checks()]
+    else:   # a problem from a computer that didn't set this TV up: the apps' versions, if the TV answers
+        parts += ["", "Setup results: not on this computer", *([live] if (live := live_versions()) else [])]
     if notes:
         parts += ["", "Notes from the agent:", notes]
     if args.owner.strip():

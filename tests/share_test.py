@@ -95,7 +95,22 @@ refuses = code != 0 and "give the notes to --preview" in err and len(sent) == 1
 sent.clear()
 code, out, err = cli("an old-style note")
 plain = code == 0 and len(sent) == 1 and "an old-style note" in sent[0]
-ok = no_file and preview and sends and refuses and plain
-print("share: " + ("--preview sends nothing, --send sends the file written, plain form still sends"
-                    if ok else f"WRONG preview/send {no_file} {preview} {sends} {refuses} {plain}"))
+# a problem, any time: works with no setup results here, says it is a problem; a setup report still needs them
+run3 = Path(tempfile.mkdtemp())
+share.RUN, share.OUT, share.QR = run3, run3 / "share.md", run3 / "share-qr.png"
+share.live_props = lambda: {}
+sent.clear()
+code, out, err = cli("--preview")
+needs_setup = code != 0 and "--problem" in err and not share.OUT.exists()
+code, out, err = cli("--preview", "--problem", "--owner", "الأذان ما اشتغل العصر", "checked the adhan setting: on")
+written = share.OUT.read_text(encoding="utf-8") if share.OUT.exists() else ""
+problem = (code == 0 and not sent and written.startswith("UrTV problem report") and "الأذان ما اشتغل العصر" in written
+           and "not on this computer" in written and "Steps" not in written)
+code, out, err = cli("--send")
+problem_sent = code == 0 and sent == [written]
+share.live_props = lambda: {"ro.product.manufacturer": "TCL", "ro.product.model": "Live TV"}
+live_tv = "TCL Live TV" in share.tv()
+ok = no_file and preview and sends and refuses and plain and needs_setup and problem and problem_sent and live_tv
+print("share: " + ("--preview sends nothing, --send sends the file written, plain form still sends, --problem works without setup results"
+                    if ok else f"WRONG preview/send {no_file} {preview} {sends} {refuses} {plain} {needs_setup} {problem} {problem_sent} {live_tv}"))
 sys.exit(1 if leaks or not counts or not alarm or not ok or bad_win or not versions_ok else 0)
