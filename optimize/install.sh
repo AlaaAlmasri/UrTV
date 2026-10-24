@@ -218,8 +218,11 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
     if [ "${1:-}" != verify ]; then
       # before anything is changed: does the wizard answer Home, and can it go without taking the Wi-Fi with it?
       if wraith_answers_home; then
+        # owned: the switch goes on with the wizard left on (the HOME role and set-home-activity choose ours, and the
+        # check below and the safety switch catch a TV where it still wins). Stopping here blocked 13 of 39 setups on
+        # 51b9680, and forgetting the network did not help on half of them.
         case "$(wifi_owner)" in
-          owned) return 5 ;;
+          owned) echo "The setup wizard answers Home and owns the saved Wi-Fi network: it is left on (the network stays), and the switch goes on without turning it off." ;;
           other) wraith=listed ;;
           *) echo "The setup wizard answers Home, but the TV did not say who owns its saved Wi-Fi: the wizard is left on, so the network is not lost." ;;
         esac
@@ -302,6 +305,7 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
        echo "Home switch: skipped, this TV refuses to turn its own home screen off" > "${URTV_RUN_DIR:-optimize/run}/home-skipped.txt" ;;
     2) echo "!! Home did not open the new launcher. Leave the TV alone: the stock home returns within 5 minutes."
        echo "   Some TCL firmware pins Home to the stock launcher; on those sets keep the stock home."
+       echo "   If the line above said the setup wizard owns the Wi-Fi, keep the stock home too: never turn the wizard off by hand."
        exit 1 ;;
     *) echo "!! The safety switch put the stock home back (ADB was too slow). Nothing is broken: run the same command again."
        exit 1 ;;
