@@ -18,6 +18,7 @@ public class SurahActivity extends Activity {
     private Catalog cat;
     private Catalog.Reciter reciter;
     private GridView grid;
+    private long lastMove;   // the last cell move by a held left/right key
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -58,11 +59,14 @@ public class SurahActivity extends Activity {
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
-        // the grid reads from the right, so the cells are walked by hand: right is right
-        if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0
+        // the grid reads from the right, so the cells are walked by hand: right is right. A held key too, a cell
+        // at a time: its repeats used to reach Android's own search, which went the other way
+        if (e.getAction() == KeyEvent.ACTION_DOWN
                 && (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT
                     || e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT)) {
-            if (moveCell(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT)) return true;
+            if (e.getRepeatCount() > 0 && e.getEventTime() - lastMove < 90) return true;
+            if (moveCell(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT)) { lastMove = e.getEventTime(); return true; }
+            if (e.getRepeatCount() > 0) return true;   // held at the edge of the grid: stay there
         }
         return super.dispatchKeyEvent(e);
     }

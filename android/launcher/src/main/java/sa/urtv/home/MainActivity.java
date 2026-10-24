@@ -37,6 +37,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
@@ -1398,12 +1399,35 @@ public class MainActivity extends Activity {
             }
         }
         // In a right to left layout Android looks for the focus the other way round, so the rows are
-        // walked by hand here: «right» always moves the highlight to the right.
-        if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
-            if (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT && moveFocusSideways(false)) return true;
-            if (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT && moveFocusSideways(true)) return true;
+        // walked by hand here: «right» always moves the highlight to the right. A held key too: its repeats
+        // used to reach Android's own search, which went the other way and raced the opening pill.
+        if (e.getAction() == KeyEvent.ACTION_DOWN
+                && (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT || e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+            if (e.getRepeatCount() > 0 && sideRow()) {
+                if (e.getEventTime() - lastSideMove < SIDE_REPEAT_MS) return true;   // a step at a time while held
+            }
+            if (moveFocusSideways(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+                lastSideMove = e.getEventTime();
+                return true;
+            }
         }
         return super.dispatchKeyEvent(e);
+    }
+
+    /** While a left/right key is held, the highlight moves one item per this many ms (the pill opens in 150). */
+    private static final long SIDE_REPEAT_MS = 120;
+    private long lastSideMove;
+
+    /** Whether the focus is in a row that moveFocusSideways walks (a pill or an app tile). */
+    private boolean sideRow() {
+        View focused = getCurrentFocus();
+        ViewParent p = focused == null ? null : focused.getParent();
+        if (isHorizontalRow(p)) return true;
+        return p instanceof ViewGroup && isHorizontalRow(((ViewGroup) p).getParent());
+    }
+
+    private static boolean isHorizontalRow(ViewParent p) {
+        return p instanceof LinearLayout && ((LinearLayout) p).getOrientation() == LinearLayout.HORIZONTAL;
     }
 
     /** Moves the focus to the next item of the row, on the right (true) or on the left (false). */
