@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Disable every package in a debloat list (one pm call per shell command; chained pm calls can stop early).
 # Packages are disabled for user 0, never uninstalled. Undo with optimize/restore.sh <same list>.
-# Refuses anything in optimize/lists/keep.txt.
+# Refuses anything in optimize/lists/keep.txt, and Android's own core (optimize/lists/core.txt), with no override.
 # Usage: optimize/disable.sh optimize/lists/tcl-safe.txt
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -13,6 +13,12 @@ blocked=$(printf '%s\n' "$pkgs" | grep -Fxf <(grep -vE '^\s*(#|$)' "$KEEP" | awk
 if [ -n "$blocked" ]; then
   echo "Refusing: these are in $KEEP (features people use, or the TV needs them):"
   printf '%s\n' "$blocked" | sed 's/^/  /'
+  exit 1
+fi
+core=$(printf '%s\n' "$pkgs" | grep -Ef <(grep -vE '^\s*(#|$)' optimize/lists/core.txt | sed 's/.*/^(&)$/') || true)
+if [ -n "$core" ]; then
+  echo "Refusing: these are Android's own core, and a TV may not start again without them (optimize/lists/core.txt):"
+  printf '%s\n' "$core" | sed 's/^/  /'
   exit 1
 fi
 # what the person asked to keep on (optimize/keep.sh restore) stays on, also on a later `run.sh again`

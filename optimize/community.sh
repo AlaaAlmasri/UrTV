@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # For a TV our own lists do not know: the community list for exactly this model, if there is one (optimize/lists/community/, from
 # CleanYourTV's tested lists, MIT; optimize/community.py decides which, conservatively, and never a list for another model).
-# Applied: its packages minus everything in keep.txt, minus launchers and setup wizards (the home switch is ours), minus what UAD-ng
+# Applied: its packages minus everything in keep.txt and core.txt, minus launchers and setup wizards (the home switch is ours), minus what UAD-ng
 # rates Unsafe, minus what the person kept (keep.sh restore). Recorded in optimize/run/community-applied.txt: the report shows them,
 # keep.sh off lists them by name, reset.sh turns them back on.
 #   optimize/community.sh
@@ -38,6 +38,8 @@ kept=$("$PY" -I optimize/offlist.py kept 2> /dev/null || true)
 grep -vE '^\s*(#|$)' "$LISTS/keep.txt" | awk '{print $1}' > "$tmp/keep"
 printf '%s\n' "$kept" >> "$tmp/keep"
 "$PY" -I optimize/community.py packages "$chosen" --keep "$tmp/keep" --homes "$tmp/homes" --installed "$tmp/installed" > "$tmp/pkgs"
+# never Android's own core, whatever the list says (optimize/lists/core.txt; disable.sh would refuse the whole list)
+grep -vEf <(grep -vE '^\s*(#|$)' "$LISTS/core.txt" | sed 's/.*/^(&)$/') "$tmp/pkgs" > "$tmp/pkgs2" || true; mv "$tmp/pkgs2" "$tmp/pkgs"
 # already off before we came: not ours (reset.sh would turn it on)
 grep -vxFf <(sed 's/^package://' <<< "$disabled") "$tmp/pkgs" > "$tmp/todo" || true
 if [ -s "$tmp/todo" ]; then   # never what UAD-ng rates Unsafe; offline, the check is skipped and the lists' own filters stay

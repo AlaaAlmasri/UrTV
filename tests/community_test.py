@@ -108,12 +108,13 @@ tree = Path(tempfile.mkdtemp())
 (tree / "optimize/lists/community").mkdir(parents=True); (tree / "optimize/run").mkdir()
 for f in ("community.sh", "community.py", "offlist.py", "disable.sh"):
     shutil.copy(ROOT / "optimize" / f, tree / "optimize" / f)
-for f in ("keep.txt", "tcl-safe.txt", "tcl-optional.txt", "names-ar.txt"):
+for f in ("keep.txt", "core.txt", "tcl-safe.txt", "tcl-optional.txt", "names-ar.txt"):
     shutil.copy(ROOT / "optimize/lists" / f, tree / "optimize/lists" / f)
 (tree / "optimize/check-packages.py").write_text("import sys\nprint('Unsafe       com.acme.risky  x')\nprint('Recommended  com.acme.ads  x')\n")
 (tree / "optimize/lists/community/acme-tv-100.txt").write_text(
     "# UrTV community list: acme-tv-100\n# match-brand: ACME\n# match-model: TV100X\n# match-device: acmedev\n"
-    "com.acme.ads\ncom.acme.risky\ncom.android.vending\ncom.acme.launcher\ncom.acme.promo\ncom.acme.kept\ncom.acme.gone\ncom.acme.alreadyoff\n")
+    "com.acme.ads\ncom.acme.risky\ncom.android.vending\ncom.acme.launcher\ncom.acme.promo\ncom.acme.kept\ncom.acme.gone\ncom.acme.alreadyoff\n"
+    "com.android.providers.contacts\ncom.google.android.permissioncontroller\ncom.vendor.support.webview\n")
 fake = tree / "fakepy"
 fake.write_text(r'''#!/usr/bin/env python3
 import os, re, sys
@@ -147,9 +148,10 @@ def step(props, installed, home=None):
     ap = (tree / "optimize/run/community-applied.txt")
     return r.returncode, r.stdout + r.stderr, (ap.read_text().split() if ap.exists() else []), (tree / "log").read_text(), (tree / "state").read_text().split()
 ACME = {"ro.product.manufacturer": "Acme", "ro.product.brand": "Acme", "ro.product.model": "TV100X", "ro.product.device": "acmedev"}
-PKGS = ["com.acme.ads", "com.acme.risky", "com.android.vending", "com.acme.launcher", "com.acme.promo", "com.acme.kept", "-com.acme.alreadyoff", "com.other.app"]
+PKGS = ["com.android.providers.contacts", "com.google.android.permissioncontroller", "com.vendor.support.webview", "com.acme.ads", "com.acme.risky", "com.android.vending", "com.acme.launcher", "com.acme.promo", "com.acme.kept", "-com.acme.alreadyoff", "com.other.app"]
 (tree / "home").mkdir(); (tree / "home/kept.txt").write_text("com.acme.kept\n")
 rc, o, applied, log, state = step(ACME, PKGS, tree / "home")
+state0 = state
 check("step: the model's list is applied minus keep.txt, the launcher, the Unsafe one, the kept one, the missing and the already-off",
       rc == 0 and sorted(applied) == ["com.acme.ads", "com.acme.promo"] and "-com.acme.ads" in state and "-com.acme.promo" in state
       and "com.android.vending" in state and "com.acme.risky" in state and "com.acme.launcher" in state and "com.acme.kept" in state, f"{o} {applied} {state}")
@@ -160,5 +162,16 @@ rc, o, applied, log, state = step({**ACME, "ro.product.manufacturer": "Other", "
 check("step: another brand with the same model: nothing applied", applied == [] and "pm disable-user" not in log, o)
 rc, o, applied, log, state = step({"ro.product.manufacturer": "TCL", "ro.product.model": "55P735"}, ["com.tcl.bi", "com.tcl.usercenter", "com.tcl.logkit", "com.tcl.messagebox", "com.acme.ads"])
 check("step: a TV our own lists know (3+ TCL packages): no community list at all", applied == [] and "our own lists know this TV" in o and "pm disable-user" not in log, o)
+# Android's own core is never disabled: community.sh leaves it out, disable.sh refuses a list that names it
+check("core: the model's list named contacts, permissioncontroller and a WebView: all left on",
+      "com.android.providers.contacts" in state0 and "com.google.android.permissioncontroller" in state0 and "com.vendor.support.webview" in state0
+      and "-com.android.providers.contacts" not in state0, state0)
+bad = tree / "bad.txt"; bad.write_text("com.acme.ads\ncom.google.android.ext.services\n")
+r = subprocess.run(["bash", str(tree / "optimize/disable.sh"), str(bad)], capture_output=True, text=True, env=dict(os.environ, PY=str(fake)))
+check("core: disable.sh refuses a list with a core package, and changes nothing", r.returncode == 1 and "Android's own core" in r.stdout and "ext.services" in r.stdout, r.stdout + r.stderr)
+committed = [l.split()[0] for f in (ROOT / "optimize/lists/community").glob("*.txt") for l in f.read_text().splitlines() if l.strip() and not l.startswith("#")]
+core = [re.compile("^(" + l.strip() + ")$") for l in (ROOT / "optimize/lists/core.txt").read_text().splitlines() if l.strip() and not l.startswith("#")]
+check("core: none of our own lists names a core package", not [p for f in ("tcl-safe.txt", "tcl-optional.txt") for p in
+      [l.split()[0] for l in (ROOT / "optimize/lists" / f).read_text().splitlines() if l.strip() and not l.startswith("#")] if any(c.match(p) for c in core)])
 print("\nall community checks passed" if not failed else f"\n{failed} failed")
 sys.exit(1 if failed else 0)
