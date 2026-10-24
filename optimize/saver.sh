@@ -143,9 +143,13 @@ case "${1:-}" in
   adhanbar) set1 adhanbar "${2:?usage: optimize/saver.sh adhanbar on|off}" ;;
   yearstrip)set1 yearstrip "${2:?usage: optimize/saver.sh yearstrip on|off}" ;;
   genres)   set1 genres "${2-}" ;;
-  leagues)  set1 leagues "${2-}" ;;
-  events)   set1 events "${2-}" ;;
-  langs)    set1 langs "${2-}" ;;
+  # no value at all is a question, not a change: it used to clear them (`""` still means none)
+  leagues)  [ $# -ge 2 ] || { echo "usage: optimize/saver.sh leagues 'دوري روشن السعودي' ('' = none; optimize/saver.sh show lists the ones set)"; exit 1; }
+            set1 leagues "$2" ;;
+  events)   [ $# -ge 2 ] || { echo "usage: optimize/saver.sh events f1,ufc,boxing ('' = none)"; exit 1; }
+            set1 events "$2" ;;
+  langs)    [ $# -ge 2 ] || { echo "usage: optimize/saver.sh langs Arabic,English"; exit 1; }
+            set1 langs "$2" ;;
   minrating)set1 minrating "${2:?usage: optimize/saver.sh minrating 7}" ;;
   photos)   set1 photos "${2:?usage: optimize/saver.sh photos 15}" ;;
   cardstyle)set1 cardstyle "${2:?usage: optimize/saver.sh cardstyle glass1}" ;;

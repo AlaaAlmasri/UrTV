@@ -209,6 +209,9 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         cat = Catalog.get(this);
         prefs = new Prefs(this);
         audio = (AudioManager) getSystemService(AUDIO_SERVICE);
+        // an adhan that never finished here (the player was stopped mid-adhan): the TV's own volume comes back now
+        savedVolume = prefs.savedTvVolume();
+        adhanVolumeBack();
         createChannel();
         session = new MediaSession(this, "urtv-tilawah");
         session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
@@ -284,6 +287,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     private void playSurah(int index, int n, int startAt) {
         if (index < 0 || index >= cat.reciters.size()) return;
+        leaveAdhan();
         Catalog.Reciter r = cat.reciters.get(index);
         if (n < 1) n = 1;
         if (n > r.surahs) n = r.surahs;
@@ -299,6 +303,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
 
     private void playRadio(int index) {
         if (index < 0 || index >= cat.stations.size()) return;
+        leaveAdhan();
         source = Prefs.SOURCE_RADIO;
         station = index;
         reciter = -1;
@@ -367,6 +372,15 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         return wasPlaying;
     }
 
+    /** A surah or a station picked while the adhan plays: the adhan ends here, and the TV's volume comes back. */
+    private void leaveAdhan() {
+        if (source != Prefs.SOURCE_ADHAN) return;
+        handler.removeCallbacks(previewStop);
+        adhanVolumeBack();
+        resumeAfterAdhan = false;
+        adhanName = null;
+    }
+
     /** The adhan is over: put the surah back where it was, or stop. */
     private void finishAdhan() {
         handler.removeCallbacks(previewStop);
@@ -390,7 +404,10 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
     private void adhanVolumeUp() {
         if (audio == null) return;
         int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        if (savedVolume < 0) savedVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC);   // the TV's own, put back at the end
+        if (savedVolume < 0) {   // the TV's own, put back at the end (also after a restart of the player: on disk)
+            savedVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC);
+            prefs.setSavedTvVolume(savedVolume);
+        }
         int want = Math.round(max * prefs.adhanVolume() / 100f);
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, Math.max(1, Math.min(max, want)), 0);
     }
@@ -399,6 +416,7 @@ public class MusicService extends Service implements AudioManager.OnAudioFocusCh
         if (savedVolume < 0) return;
         if (audio != null) audio.setStreamVolume(AudioManager.STREAM_MUSIC, savedVolume, 0);
         savedVolume = -1;
+        prefs.setSavedTvVolume(-1);
     }
 
     private void startUrl(String url) {

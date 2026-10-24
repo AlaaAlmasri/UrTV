@@ -33,6 +33,9 @@ final class Prefs {
     /** The adhan's own volume, in percent; the TV's volume comes back after it. */
     int adhanVolume() { int v = sp.getInt("adhan_volume", 30); return v < 10 || v > 100 ? 30 : v; }
     void setAdhanVolume(int percent) { sp.edit().putInt("adhan_volume", percent).apply(); }
+    /** The TV's own volume while an adhan plays, kept on disk so it comes back even if the player was stopped mid-adhan (-1: none). */
+    int savedTvVolume() { return sp.getInt("tv_volume_saved", -1); }
+    void setSavedTvVolume(int v) { sp.edit().putInt("tv_volume_saved", v).commit(); }
 
     /** The voice number that stands for the person's own recording (OwnAdhan); the numbered ones are 1..21. */
     static final int OWN = 0;
