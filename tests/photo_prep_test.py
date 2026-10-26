@@ -125,6 +125,23 @@ try:
 except ValueError:
     check("a missing file is refused", True)
 
+# HEIC (when pillow-heif is there) opens and comes out as a JPEG; RAW and HEIC without support say what to do
+if photo_prep.HEIC:
+    import pillow_heif
+    hp = os.path.join(tmp, "p.heic")
+    pillow_heif.from_pillow(Image.new("RGB", (400, 300), (10, 120, 60))).save(hp)
+    out, size = prep(hp)
+    check("HEIC: opened and saved as a JPEG", size == (400, 300) and Image.open(out).format == "JPEG", str(size))
+else:
+    print("SKIP HEIC: pillow-heif is not installed here")
+for name, word in (("shot.dng", "RAW"), ("shot.heic", "export it as JPEG")):
+    p = os.path.join(tmp, name); open(p, "wb").write(b"junk")
+    try:
+        prep(p); check(f"{name} that cannot be read: refused", False, "no error")
+    except ValueError as e:
+        check(f"{name} that cannot be read: says what to do", word in str(e) or (name.endswith("heic") and "not a photo" in str(e)), str(e))
+check("the message names the supported formats", "JPEG, PNG, WebP" in photo_prep.FORMATS)
+
 # the command line (no -I here: it would hide a Pillow that pip put in the user's site-packages, as on CI;
 # photos.sh runs it with the venv's python, whose packages -I keeps)
 import subprocess

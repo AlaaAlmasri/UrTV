@@ -27,13 +27,19 @@ app's preview of the same page and `measure.sh` writes «not measured»). Times 
 | Xiaomi MiTV-AFMU0 | 14 | works | not reported | not reported | Play Protect refused the home APK over ADB at first (`install.sh` now turns that check off for the install only and puts it back); SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (slow steps now run in the background on the TV; `SKIP_EXTRAS=1` skips the extras) | not reported |
 | Xiaomi MiTV-AXTU0 | 14 | works | not reported | not reported | – | not reported |
 | Xiaomi MiTV-MZTU0 · 2 reports | 14 | works | not reported | not reported | – | not reported |
+| Xiaomi MiTV-MOOQ0 | not reported | not reported | not reported | not reported | – | not reported |
 | Sony BRAVIA 4K UR3 (BRAVIA_UR3) · 5 reports | 10 | works, first time | yes | turn on USB debugging and network debugging first | one TV showed up only as a Cast device until it was unplugged and plugged in again; SmartTube upload over Wi-Fi is slow but completes | 14 min |
 | Sony BRAVIA VH1 | 12 | works | not reported | not reported | SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (slow steps now run in the background on the TV; `SKIP_EXTRAS=1` skips the extras) | not reported |
+| Sony BRAVIA 4K VH2 | not reported | not reported | not reported | not reported | SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (the install is now watched with short looks, and an extra that still fails is skipped by itself; `SKIP_EXTRAS=1` skips the extras) | not reported |
+| Sony BRAVIA 4K VH22 | not reported | not reported | not reported | not reported | – | not reported |
 | Sony BRAVIA 4K GB ATV3 | 9 | works | not reported | not reported | – | not reported |
 | Sony BRAVIA 4K GB ATV2 | 9 | works | not reported | not reported | – | not reported |
 | Skyworth SWTV-20AE-PRO | 11 | works (tvlauncher off) | no | 5555, an occasional timeout that retries by itself | – | 14 min |
 | Skyworth SWTV-20AE | 10 | works | not reported | not reported | – | not reported |
 | Skyworth SWTV-22AE | 11 | works | not reported | not reported | – | not reported |
+| Skyworth SWTV-22AE-FHD (umeda) | not reported | not reported | not reported | not reported | – | not reported |
+| Skyworth IRIS 2K (beomil) | 14 | not reported | not reported | not reported | – | not reported |
+| Skyworth SWTV SW3_ATV | 9 | not reported | not reported | not reported | – | not reported |
 | Skyworth SWTV-24AE-4K NF | 14 | works | no | port 5555 closed: pair once through Wireless debugging, then `adb tcpip 5555`; the port disappears after every reboot | reconnect after each restart; APK uploads slow | 39 min |
 | Skyworth TORNADO 4K | 11 | works | not reported | not reported | – | not reported |
 | SHARP Android TV (Skyworth SW4H_FF) · 2 reports | 11 | works | not reported | not reported | – | not reported |
@@ -41,14 +47,30 @@ app's preview of the same page and `measure.sh` writes «not measured»). Times 
 | Skyworth, Google TV (model not given) | 14 | not reported | not reported | port 5555 closed: pair through Wireless debugging; the port disappears after every reboot | reconnect after each restart | not reported |
 | Changhong AI PONT (Wansa / Classpro) | 11 | works | not reported | not reported | seen on several sites | not reported |
 | Changhong AI PONT (central) | 14 | works | not reported | not reported | SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (slow steps now run in the background on the TV; `SKIP_EXTRAS=1` skips the extras) | not reported |
+| Changhong AI PONT (longshan) | not reported | not reported | not reported | not reported | – | not reported |
+| Changhong AI PONT (samseong) | not reported | not reported | not reported | not reported | – | not reported |
 | Haier Android TV FF Pro | 14 | works | not reported | not reported | – | not reported |
+| Haier Android TV DVB (dupont) | not reported | not reported | not reported | not reported | – | not reported |
 | Haier MatrixTV BE · 2 reports | 14 | works | not reported | not reported | Play Protect refused the home APK over ADB at first (`install.sh` now turns that check off for the install only and puts it back); SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (slow steps now run in the background on the TV; `SKIP_EXTRAS=1` skips the extras) | not reported |
 | Hisense HiSmartTV A4 (Toshiba) | 9 | works | not reported | not reported | – | not reported |
+| Hisense SmartTV 4K FFM (hengshan) | 12 | not reported | not reported | not reported | SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (the install is now watched with short looks, and an extra that still fails is skipped by itself; `SKIP_EXTRAS=1` skips the extras) | not reported |
+| Hisense HiSmartTV A4 | 11 | not reported | not reported | not reported | – | not reported |
 | Chromecast with Google TV (sabrina) · 2 reports | 14 | works | not reported | no Network debugging, only Wireless debugging: `adb pair`, then `adb tcpip 5555`; every restart turns it off and closes 5555 | pair and run `adb tcpip 5555` again after each restart (wireless debugging must be paired again after a reboot); SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (slow steps now run in the background on the TV; `SKIP_EXTRAS=1` skips the extras) | not reported |
 | Chromecast HD (boreal) | 14 | works | not reported | same as the sabrina: Wireless debugging only, `adb pair`, then `adb tcpip 5555`; closes at every restart | pair again after each restart; SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (slow steps now run in the background on the TV; `SKIP_EXTRAS=1` skips the extras) | not reported |
+| Google TV Streamer (kirkwood) | not reported | not reported | not reported | not reported | – | not reported |
 | SCBC R4 | 11 | works | not reported | 5555 | the TV's IP changed mid-setup: rediscovery (`optimize/find-tv.sh`) fixed it | not reported |
+| SCBC ATV R2 | not reported | not reported | not reported | not reported | – | not reported |
 | JPE at30a7 (DANSAT) | 13 | works | not reported | not reported | SmartTube (about 25 MB) uploaded to 100%, then the install ended in a read timeout on the TV (slow steps now run in the background on the TV; `SKIP_EXTRAS=1` skips the extras) | not reported |
 | Philips 4K (Funai guui) | 11 | works | not reported | not reported | – | not reported |
+| Philips PH1M_EA_9970A | not reported | not reported | not reported | not reported | – | not reported |
+| H96_Max_X3 | not reported | not reported | not reported | not reported | – | not reported |
+| KTC mt5867 | not reported | not reported | not reported | not reported | – | not reported |
+| UGOOS AM8 | not reported | not reported | not reported | not reported | – | not reported |
+| Vestel | not reported | not reported | not reported | not reported | – | not reported |
+| SEI A1 | not reported | not reported | not reported | not reported | – | not reported |
+| MOKA R3G | not reported | not reported | not reported | not reported | – | not reported |
+| xangshi XS97 | not reported | not reported | not reported | not reported | – | not reported |
+| SHARP AQUOS | not reported | not reported | not reported | not reported | – | not reported |
 
 ## On the computer
 
