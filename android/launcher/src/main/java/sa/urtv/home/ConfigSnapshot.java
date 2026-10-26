@@ -16,16 +16,19 @@ final class ConfigSnapshot {
     final String fragment;
     /** an older screensaver does not say: on, the default */
     final boolean greetingOn, adhanBarOn;
+    final String greetingName;
 
-    private ConfigSnapshot(String fragment, boolean greetingOn, boolean adhanBarOn) {
+    private ConfigSnapshot(String fragment, boolean greetingOn, boolean adhanBarOn, String greetingName) {
         this.fragment = fragment;
         this.greetingOn = greetingOn;
         this.adhanBarOn = adhanBarOn;
+        this.greetingName = greetingName;
     }
 
     static ConfigSnapshot read(Context c) {
         String fragment = null;
         boolean greeting = true, bar = true;
+        String name = "";
         try (Cursor cur = c.getContentResolver().query(URI, null, null, null, null)) {
             if (cur != null && cur.moveToFirst()) {
                 fragment = cur.getString(0);
@@ -33,11 +36,13 @@ final class ConfigSnapshot {
                 if (g >= 0 && "0".equals(cur.getString(g))) greeting = false;
                 int b = cur.getColumnIndex("adhan_bar");
                 if (b >= 0 && "0".equals(cur.getString(b))) bar = false;
+                int n = cur.getColumnIndex("greeting_name");
+                if (n >= 0 && cur.getString(n) != null) name = cur.getString(n);
             }
         } catch (RuntimeException ignored) {
             // the screensaver is missing or signed with another key: the defaults (Riyadh, on)
         }
-        return new ConfigSnapshot(fragment, greeting, bar);
+        return new ConfigSnapshot(fragment, greeting, bar, name);
     }
 
     /** {city, zone id}; null when the screensaver gave nothing: the TV's own zone then */

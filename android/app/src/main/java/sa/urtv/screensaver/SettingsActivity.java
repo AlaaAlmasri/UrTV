@@ -185,6 +185,8 @@ public class SettingsActivity extends Activity {
         }
         row("التحية والطقس", prefs.greeting() ? "تعمل" : "متوقفة", R.drawable.ic_eye,
             new Runnable() { public void run() { prefs.setGreeting(!prefs.greeting()); render(); } });
+        row("Name beside greeting", prefs.greetingName().isEmpty() ? "Not set" : prefs.greetingName(), R.drawable.ic_eye,
+            new Runnable() { public void run() { askGreetingName(); } });
         row("ترتيب التطبيقات المفضلة", "قائمة ترتّب فيها المفضلة بالأسهم", R.drawable.ic_star,
             new Runnable() { public void run() { openDockSettings(); } });
 
@@ -712,6 +714,20 @@ public class SettingsActivity extends Activity {
                 render();
             })
             .setNegativeButton("إلغاء", null).show();
+        in.requestFocus();
+    }
+
+    private void askGreetingName() {
+        final EditText in = new EditText(this);
+        in.setHint("For example: Sarah");
+        in.setText(prefs.greetingName());
+        in.setSingleLine(true);
+        in.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        new Dlg(this).setTitle("Name beside greeting")
+            .setView(in)
+            .setPositiveButton("Save", (d, w) -> { prefs.setGreetingName(in.getText().toString()); render(); })
+            .setNeutralButton("Clear", (d, w) -> { prefs.setGreetingName(""); render(); })
+            .setNegativeButton("Cancel", null).show();
         in.requestFocus();
     }
 

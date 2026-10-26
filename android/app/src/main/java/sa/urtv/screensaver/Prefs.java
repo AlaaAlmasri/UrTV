@@ -589,6 +589,12 @@ final class Prefs {
     /** The greeting and the weather line on the launcher's home screen (default on). Off: the plain good-morning it had. */
     boolean greeting() { return sp.getBoolean("greeting", true); }
     void setGreeting(boolean v) { sp.edit().putBoolean("greeting", v).apply(); }
+    String greetingName() { return sp.getString("greeting_name", ""); }
+    void setGreetingName(String v) {
+        String name = v == null ? "" : v.trim().replaceAll("\\s+", " ");
+        if (name.length() > 30) name = name.substring(0, 30).trim();
+        sp.edit().putString("greeting_name", name).apply();
+    }
 
     List<String> teamIds() {
         List<String> ids = new ArrayList<>();

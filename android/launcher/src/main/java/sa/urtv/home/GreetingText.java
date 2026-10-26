@@ -20,28 +20,33 @@ final class GreetingText {
 
     static String greeting(int part) {
         switch (part) {
-            case MORNING: return "صباح الخير";
-            case DAY: return "طاب يومك";
-            case EVENING: return "مساء الخير";
-            default: return "تصبح على خير";
+            case MORNING: return "Good morning";
+            case DAY: return "Have a good day";
+            case EVENING: return "Good evening";
+            default: return "Good night";
         }
+    }
+
+    static String withName(String greeting, String name) {
+        String clean = name == null ? "" : name.trim();
+        return clean.isEmpty() ? greeting : greeting + ", \u2068" + clean + "\u2069";
     }
 
     /** Open-Meteo's WMO weather code, as a short phrase that goes before «في المدينة». */
     static String sky(int code) {
         switch (code) {
-            case 0: return "سماء صافية";
-            case 1: return "سماء صافية غالبًا";
-            case 2: return "غائم جزئيًا";
-            case 3: return "سماء غائمة";
-            case 45: case 48: return "ضباب";
-            case 51: case 53: case 55: case 56: case 57: return "رذاذ";
-            case 61: case 63: case 80: case 81: return "أمطار";
-            case 65: case 82: return "أمطار غزيرة";
-            case 66: case 67: return "مطر متجمد";
-            case 71: case 73: case 75: case 77: case 85: case 86: return "ثلوج";
-            case 95: return "عواصف رعدية";
-            case 96: case 99: return "عواصف رعدية وبرد";
+            case 0: return "Clear sky";
+            case 1: return "Mainly clear";
+            case 2: return "Partly cloudy";
+            case 3: return "Overcast";
+            case 45: case 48: return "Fog";
+            case 51: case 53: case 55: case 56: case 57: return "Drizzle";
+            case 61: case 63: case 80: case 81: return "Rain";
+            case 65: case 82: return "Heavy rain";
+            case 66: case 67: return "Freezing rain";
+            case 71: case 73: case 75: case 77: case 85: case 86: return "Snow";
+            case 95: return "Thunderstorm";
+            case 96: case 99: return "Thunderstorm with hail";
             default: return "";
         }
     }
@@ -63,15 +68,15 @@ final class GreetingText {
     /** The sky's word, and beside it (not instead of it) «وغبار» / «وغبار كثيف» when the dust level (the larger of Open-Meteo's pm10 and dust) says so. */
     static String skyWord(int code, double dust) {
         String sky = sky(code);
-        String d = dust >= HEAVY_DUST ? "غبار كثيف" : dust >= DUST ? "غبار" : "";
-        return d.isEmpty() ? sky : sky.isEmpty() ? d : sky + " و" + d;
+        String d = dust >= HEAVY_DUST ? "Heavy dust" : dust >= DUST ? "Dust" : "";
+        return d.isEmpty() ? sky : sky.isEmpty() ? d : sky + " and " + d;
     }
 
     /** «سماء صافية في الرياض، ٣١°» (no «·» beside a digit: the TV's font draws it as ٠); a code we have no word for gives just «الرياض، ٣١°»; dust (0 when unknown) is told beside the sky: «سماء صافية وغبار في الرياض، ٣٥°». */
     static String weather(int code, double dust, String city, double temp, boolean latin) {
         String sky = skyWord(code, dust);
-        String place = sky.isEmpty() ? city : sky + " في " + city;
-        return place + "، " + digits(Math.round(temp) + "°", latin);
+        String place = sky.isEmpty() ? englishCity(city) : sky + " in " + englishCity(city);
+        return place + ", " + Math.round(temp) + "°";
     }
 
     /** «الغروب ٥:٥٧ م» from "17:57". */
@@ -80,7 +85,27 @@ final class GreetingText {
         int h = Integer.parseInt(hhmm.substring(0, colon));
         String m = hhmm.substring(colon + 1, colon + 3);
         int h12 = h % 12 == 0 ? 12 : h % 12;
-        return label + " " + digits(h12 + ":" + m, latin) + " " + (h < 12 ? "ص" : "م");
+        String englishLabel = "الشروق".equals(label) ? "Sunrise" : "Sunset";
+        return englishLabel + " " + h12 + ":" + m + " " + (h < 12 ? "AM" : "PM");
+    }
+
+    static String englishCity(String city) {
+        if (city == null) return "";
+        switch (city.trim()) {
+            case "الكويت": return "Kuwait";
+            case "الرياض": return "Riyadh";
+            case "جدة": return "Jeddah";
+            case "مكة المكرمة": case "مكة": return "Makkah";
+            case "المدينة المنورة": case "المدينة": return "Madinah";
+            case "الدمام": return "Dammam";
+            case "أبها": return "Abha";
+            case "دبي": return "Dubai";
+            case "أبوظبي": case "أبو ظبي": return "Abu Dhabi";
+            case "الدوحة": return "Doha";
+            case "المنامة": return "Manama";
+            case "مسقط": return "Muscat";
+            default: return city;
+        }
     }
 
     /** Arabic-Indic digits (as the page's #digits=hindi), or the Latin ones left alone. */

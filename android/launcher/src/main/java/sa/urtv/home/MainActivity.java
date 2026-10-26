@@ -970,15 +970,15 @@ public class MainActivity extends Activity {
         int h = now.get(Calendar.HOUR_OF_DAY);
         greetingLine.update(h, cfg);
         int hh = h % 12 == 0 ? 12 : h % 12;   // always 12-hour
-        clock.setText(arabicDigits(hh + ":" + String.format(Locale.ROOT, "%02d", now.get(Calendar.MINUTE))));
-        ampm.setText(h < 12 ? "ص" : "م");
+        clock.setText(hh + ":" + String.format(Locale.ROOT, "%02d", now.get(Calendar.MINUTE)));
+        ampm.setText(h < 12 ? "AM" : "PM");
         boolean other = zone != null && ClockZone.differs(tvTz, tz, ms);
         zoneLine.setVisibility(other ? View.VISIBLE : View.GONE);
-        if (other) zoneLine.setText(ClockZone.label(zone[0]));
+        if (other) zoneLine.setText("Local time in " + GreetingText.englishCity(zone[0]));
         if (gregFormat == null) {
-            gregFormat = new SimpleDateFormat("d MMMM", new Locale("ar"));
+            gregFormat = new SimpleDateFormat("d MMMM", Locale.US);
             try {
-                hijriFormat = new android.icu.text.SimpleDateFormat("EEEE، d MMMM y", new android.icu.util.ULocale("ar_SA@calendar=islamic-umalqura"));
+                hijriFormat = new android.icu.text.SimpleDateFormat("EEEE, d MMMM y", new android.icu.util.ULocale("en@calendar=islamic-umalqura"));
             } catch (Exception ignored) { }
         }
         if (!tz.equals(formatZone)) {
@@ -988,10 +988,10 @@ public class MainActivity extends Activity {
         }
         String hijri = "";
         try {
-            if (hijriFormat != null) hijri = hijriFormat.format(now.getTime()).replaceAll("\\s*هـ\\s*$", "") + " هـ";
+            if (hijriFormat != null) hijri = hijriFormat.format(now.getTime());
         } catch (Exception ignored) { }
         String greg = gregFormat.format(now.getTime());
-        date.setText(arabicDigits(hijri.isEmpty() ? greg : hijri + "  –  " + greg));
+        date.setText(hijri.isEmpty() ? greg : hijri + "  –  " + greg);
         updateAdhanBar(cfg);
         sa.urtv.home.tilawah.AdhanSync.onConfig(this, cfg.fragment);   // «تعديل وقت الصلاة» changed on the TV: the alarm follows
         updateSleepPill();
