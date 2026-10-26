@@ -2847,7 +2847,7 @@ const WX_CODES = {
 // When the current reading was fetched, and the last dust reading (µg/m³): both are kept on the device. A reading older than 3 hours is
 // not shown as «now» (the temperature, the word and the day's range at the top left go blank until a new one arrives).
 const WX_STALE_MS = 3*3600000;
-let WX = {at: 0, pm: 0, pmAt: 0};
+let WX = {at: 0, pm: 0, pmAt: 0, vis: null};
 try{ WX = Object.assign(WX, JSON.parse(localStorage.getItem(LS.wx) || '{}')); }catch(e){}
 const saveWx = () => { try{ localStorage.setItem(LS.wx, JSON.stringify(WX)); }catch(e){} };
 function wxExpire(){
@@ -2869,12 +2869,12 @@ async function loadWeather(){
   try{
     // the hours card asks in the same request: its hourly values, and sunrise and sunset for the day or night icon
     const hours = USES('hourly');
-    const r = await fetchT(`https://api.open-meteo.com/v1/forecast?${q}&current=temperature_2m,weather_code`
+    const r = await fetchT(`https://api.open-meteo.com/v1/forecast?${q}&current=temperature_2m,weather_code,visibility`
                          + `&daily=temperature_2m_max,temperature_2m_min,weather_code${hours ? ',sunrise,sunset' : ''}&forecast_days=5`
                          + (hours ? '&hourly=temperature_2m,weather_code' : ''), 12000);
     if(!r.ok) throw 0;
     const j = await r.json();
-    WX.at = Date.now(); saveWx();
+    WX.at = Date.now(); WX.vis = typeof j.current.visibility === 'number' ? j.current.visibility : null; saveWx();
     setText(document.getElementById('wx-temp'), ar(Math.round(j.current.temperature_2m)) + '°');
     const d = document.getElementById('wx-desc');
     setText(d, WX_CODES[j.current.weather_code] || '');
@@ -2904,7 +2904,16 @@ async function loadWeather(){
     const c = (await r.json()).current || {};
     WX.pm = Math.max(c.pm10 || 0, c.dust || 0); WX.pmAt = Date.now(); saveWx();
   }catch(e){}                                  // no answer: the last dust reading stands, not a clear sky
-  setText(document.getElementById('wx-dust'), WX.pm >= 150 && Date.now() - WX.pmAt < WX_STALE_MS ? (WX.pm >= 400 ? 'غبار كثيف' : 'غبار') : '');
+  setText(document.getElementById('wx-dust'), Date.now() - WX.pmAt < WX_STALE_MS ? dustWord(WX.pm, WX.vis) : '');
+}
+// The air-quality model (CAMS) can put thousands of µg/m³ of dust over Riyadh for days while the sky is clear and the visibility is
+// 20 km (issue #29): the dust is said only when the visibility agrees, under 10 km for «غبار» and under 3 km for «غبار كثيف».
+// No visibility in the answer: the thresholds alone, as before.
+function dustWord(pm, vis){
+  if(!(pm >= 150)) return '';
+  if(vis == null) return pm >= 400 ? 'غبار كثيف' : 'غبار';
+  if(vis >= 10000) return '';
+  return pm >= 400 && vis < 3000 ? 'غبار كثيف' : 'غبار';
 }
 
 // night dimming: transparent by day, dark after 21:00 and before 07:00

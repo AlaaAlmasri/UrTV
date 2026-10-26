@@ -2876,6 +2876,23 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
   }
 }
 
+// ---- issue #29: the air-quality model says thousands of µg/m³ of dust over a clear Riyadh; the visibility decides
+{
+  const hdr = { 'Access-Control-Allow-Origin': '*' };
+  for (const [vis, want, why] of [[20800, '', '20.8 km: no dust'], [4000, 'غبار', '4 km: «غبار», not «كثيف»'], [800, 'غبار كثيف', '800 m: «غبار كثيف»']]) {
+    const { p, ctx } = await open('tv.html', 'panel=forecast&teams=', { now: new Date('2026-10-22T09:00:00Z'), net: r => {
+      const u = r.request().url();
+      if (/air-quality-api/.test(u)) { r.fulfill({ json: { current: { pm10: 1654, dust: 2466 } }, headers: hdr }); return true; }
+      if (/api\.open-meteo\.com\/v1\/forecast/.test(u)) { r.fulfill({ json: { current: { temperature_2m: 33, weather_code: 0, visibility: vis }, daily: { time: ['2026-10-22'], weather_code: [0], temperature_2m_max: [38], temperature_2m_min: [24] } }, headers: hdr }); return true; }
+      return false;
+    } });
+    await p.waitForTimeout(500);
+    const got = await p.evaluate(() => document.getElementById('wx-dust').textContent);
+    check(`weather: dust 2466 µg/m³ with ${why}`, got === want, JSON.stringify(got));
+    await ctx.close();
+  }
+}
+
 // ---- Isha is Maghrib plus its delay, an absolute time: after midnight it reads 24:xx, not an hour that is already gone
 {
   const { p, ctx, errors } = await open('tv.html', 'city=Oslo&lat=59.91&lon=10.75&tz=Europe%2FOslo&teams=&panel=prayers', { now: new Date('2026-06-21T10:00:00Z') });

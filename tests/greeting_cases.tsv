@@ -25,3 +25,10 @@ weather	0	399	الرياض	35	hindi	سماء صافية وغبار في الري
 weather	0	400	الرياض	35	hindi	سماء صافية وغبار كثيف في الرياض، ٣٥°	400 and over is heavy dust
 weather	63	820	الرياض	35	latin	أمطار وغبار كثيف في الرياض، 35°	dust is beside the rain, as on the screensaver
 weather	42	200	الرياض	31	hindi	غبار في الرياض، ٣١°	a code with no word still gets the dust word
+# seen  dust  visibility (m, -1 unknown)  the dust level told (issue #29: CAMS dust over a clear Riyadh)
+seen	2466	20800	0	2466 µg/m³ with 20.8 km visibility (Riyadh, #29): no dust
+seen	2466	10000	0	10 km visibility: no dust
+seen	2466	4000	399	4 km: at most «غبار»
+seen	2466	800	2466	800 m: «غبار كثيف» possible
+seen	220	-1	220	no visibility known: the level as before
+seen	220	6000	220	6 km and 220: «غبار»

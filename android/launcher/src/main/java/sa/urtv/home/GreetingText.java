@@ -49,6 +49,17 @@ final class GreetingText {
     /** PM10 or dust in µg/m³ from which the air is «غبار», and «غبار كثيف»: the page's thresholds (told beside its condition word) */
     static final double DUST = 150, HEAVY_DUST = 400;
 
+    /**
+     * The dust level to tell, given the visibility in metres (negative: not known). The air-quality model can put thousands of µg/m³
+     * of dust over Riyadh for days under a clear sky with 20 km of visibility (issue #29): at 10 km or more no dust is told, under
+     * 3 km it may be «كثيف», in between at most «غبار». Unknown visibility: the level as it is (the page does the same: dustWord).
+     */
+    static double seenDust(double dust, double vis) {
+        if (vis < 0) return dust;
+        if (vis >= 10000) return 0;
+        return vis < 3000 ? dust : Math.min(dust, HEAVY_DUST - 1);
+    }
+
     /** The sky's word, and beside it (not instead of it) «وغبار» / «وغبار كثيف» when the dust level (the larger of Open-Meteo's pm10 and dust) says so. */
     static String skyWord(int code, double dust) {
         String sky = sky(code);
