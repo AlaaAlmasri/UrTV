@@ -16,12 +16,15 @@ python3 tests/run_lock_test.py
 python3 tests/reboot_test.py
 python3 tests/tv_identity_test.py
 python3 tests/tv_read_only_test.py
+python3 tests/tv_safety_test.py
+python3 tests/tweaks_trim_test.py
 python3 tests/key_home_test.py
 python3 tests/dock_names_test.py
 python3 tests/dock_sleep_test.py
 python3 tests/find_tv_test.py
 python3 tests/wireless_test.py
 python3 tests/precheck_test.py
+python3 tests/install_saver_webview_test.py
 python3 tests/autostart_test.py
 python3 tests/find_team_test.py
 python3 tests/team_search_test.py
@@ -40,6 +43,7 @@ python3 tests/keep_test.py
 python3 tests/keep_restore_test.py
 python3 tests/community_test.py
 python3 tests/reset_screensaver_test.py
+python3 tests/reset_tweaks_test.py
 python3 tests/task_voice_test.py
 python3 tests/task_ids_test.py
 python3 tests/render_gone_test.py

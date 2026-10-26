@@ -7,8 +7,8 @@
 #                                  github.com/truefedex/tv-bro) and SmartTube (YouTube without ads,
 #                                  github.com/yuliskov/SmartTube), the build that fits the TV's processor
 #   optimize/install.sh all        both (saver, launcher)
-# The first install of the screensaver replaces an APK signed with another key: uninstall the old one first
-# (pm uninstall sa.urtv.screensaver) — this script does that only if a plain install fails.
+# An APK signed with another key cannot replace the installed one: this script stops with a !! line and never uninstalls
+# by itself (that deletes the app's settings); the agent asks the person first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PY="${PY:-optimize/venv/bin/python}"
@@ -56,13 +56,16 @@ pm_install() {   # $1 file name in /data/local/tmp, $2 package: pm's answer. A b
   # minute, which ADB takes for a dead TV: it runs in the background on the TV and is polled (tv.py --bg).
   # Some operator TVs have a system service that removes apps installed from ADB seconds later; installed with the
   # Play Store as the installer they stay. So: still there after 3 s? If not, install once more that way, and say so.
+  # tv.py --bg exits with pm's own exit code (1 on a failed install): that is not a failure of this function. A TV that
+  # never answered gives no output at all: NO_ANSWER, which the callers turn into a clear line.
   local out
-  out=$("$PY" -I optimize/tv.py --bg install "pm install -r /data/local/tmp/$1")
+  out=$(TV_JOB_LIMIT_S=1200 "$PY" -I optimize/tv.py --bg install "pm install -r /data/local/tmp/$1") || true
+  if [ -z "$out" ]; then printf '%s\n' NO_ANSWER; return 0; fi
   if grep -q Success <<< "$out"; then
     sleep 3
     if ! "$PY" -I optimize/tv.py "pm list packages $2" | tr -d '\r' | grep -qx "package:$2"; then
       echo "$2 was removed right after the install (a service of this TV does that to apps installed over ADB): installing it again as if from the Play Store." >&2
-      out=$("$PY" -I optimize/tv.py --bg install "pm install -i com.android.vending -r /data/local/tmp/$1")
+      out=$(TV_JOB_LIMIT_S=1200 "$PY" -I optimize/tv.py --bg install "pm install -i com.android.vending -r /data/local/tmp/$1") || true
       sleep 3
       if grep -q Success <<< "$out" && ! "$PY" -I optimize/tv.py "pm list packages $2" | tr -d '\r' | grep -qx "package:$2"; then
         out="Failure [$2 is removed by this TV right after every install]"
@@ -90,15 +93,17 @@ push_install() {   # $1 apk name, $2 package
     "$PY" -I optimize/tv.py "settings put global $VERIFIER 0" > /dev/null || true
     out=$(pm_install "$1" "$2")
   fi
+  if [ "$out" = NO_ANSWER ]; then
+    echo "!! The TV stopped answering while $1 was installing (some TVs take minutes and drop ADB meanwhile). Wait a minute, check the TV is on and on Wi-Fi, then run the same command again: an install that finished is found and not repeated."
+    exit 1
+  fi
   if ! grep -q Success <<< "$out"; then
-    # only a signing-key clash justifies removing the installed app (and its settings); anything else stops here
+    # an app with this name but another signature (a copy built by hand, or from another source) cannot be updated in place,
+    # and removing it deletes its settings, tasks and own adhan: never done here, the person decides
     if grep -qE 'UPDATE_INCOMPATIBLE|signatures do not match' <<< "$out"; then
-      echo "An older $2 signed with another key is installed: removing it, then installing again."
-      # removing the home app while the stock one is off would leave the TV with no home at all
-      [ "$2" = sa.urtv.home ] && "$PY" -I optimize/tv.py "pm enable ${STOCK%%/*}" > /dev/null || true
-      "$PY" -I optimize/tv.py "pm uninstall $2" || true
-      out=$(pm_install "$1" "$2")
-      grep -q Success <<< "$out" || { echo "!! Install of $1 failed again: $out"; exit 1; }
+      echo "!! $2 is already installed, signed with another key (a copy built by hand or from another source), so ours cannot replace it. Nothing was removed."
+      echo "   Removing it (pm uninstall $2) would delete its settings, tasks and own adhan, and Android cannot keep them across signatures. Ask the person first, in Arabic: «عندك نسخة من التطبيق غير الرسمية، لو أزلناها تنحذف إعداداتها ومهامها. أزيلها وأثبّت الرسمية (تتحدّث وحدها بعدين)؟». Only after a yes: pm uninstall $2, then the same command again."
+      exit 1
     else
       echo "!! Install of $1 failed: $out"
       if grep -q INSTALL_FAILED_VERIFICATION_FAILURE <<< "$out"; then
@@ -143,9 +148,13 @@ for abi in [a for a in sys.argv[2].split(",") if a] + ["universal", ""]:
   elif ! curl_get -fsSL -o "optimize/$name" "$url"; then echo "!! Could not download $url"; failed=1; return 0; fi
   "$PY" -I optimize/tv.py --push-b64 "optimize/$name" "/data/local/tmp/$name"
   out=$(pm_install "$name" "$2")
-  "$PY" -I optimize/tv.py "rm -f /data/local/tmp/$name" > /dev/null
+  "$PY" -I optimize/tv.py "rm -f /data/local/tmp/$name" > /dev/null 2>&1 || true
   rm -f "optimize/$name"
-  if grep -q Success <<< "$out"; then echo "Installed $name"
+  if [ "$out" = NO_ANSWER ]; then
+    # an extra never stops the setup: the install may even have finished while the TV was silent
+    if "$PY" -I optimize/tv.py "pm list packages $2" 2> /dev/null | tr -d '\r' | grep -qx "package:$2"; then echo "Installed $name (the TV was slow to answer)"
+    else echo "!! $2 was skipped: the TV stopped answering while it installed (slow Wi-Fi or a slow set). The rest of the setup goes on; to add it later: optimize/install.sh extras"; fi
+  elif grep -q Success <<< "$out"; then echo "Installed $name"
   elif grep -qE 'UPDATE_INCOMPATIBLE|signatures do not match' <<< "$out"; then
     echo "$2 is already installed from somewhere else: left as it is (with its settings)."   # never removed
   else echo "!! Install of $name failed: $out"; failed=1; fi
@@ -159,13 +168,20 @@ fi
 
 if [ "$what" = saver ] || [ "$what" = all ]; then
   push_install urtv-screensaver.apk sa.urtv.screensaver
-  printf '%s\n' \
-    "settings put secure screensaver_enabled 1" \
-    "settings put secure screensaver_components sa.urtv.screensaver/.ScreenDream" \
-    "settings put secure screensaver_default_component sa.urtv.screensaver/.ScreenDream" \
-    "am start --activity-clear-task -n sa.urtv.screensaver/.SettingsActivity" \
-    | "$PY" -I optimize/tv.py --batch
-  echo "Screensaver installed and selected. Its settings screen is open on the TV."
+  # a WebView older than 80 cannot run the page: the TV keeps its own screensaver (ours is installed, not selected) until
+  # the person updates «Android System WebView»; precheck.sh held exits 4 then, and says nothing when it cannot tell
+  held=0; PY="$PY" optimize/precheck.sh held > /dev/null 2>&1 || { [ "$?" != 4 ] || held=1; }
+  if [ "$held" = 1 ]; then
+    echo "!! The screensaver is installed but NOT switched on: this TV's WebView is older than 80 and the page would not run, so the TV keeps its own screensaver. Update «Android System WebView» in the Play Store (optimize/precheck.sh webview-store opens it), then run optimize/install.sh saver again."
+  else
+    printf '%s\n' \
+      "settings put secure screensaver_enabled 1" \
+      "settings put secure screensaver_components sa.urtv.screensaver/.ScreenDream" \
+      "settings put secure screensaver_default_component sa.urtv.screensaver/.ScreenDream" \
+      "am start --activity-clear-task -n sa.urtv.screensaver/.SettingsActivity" \
+      | "$PY" -I optimize/tv.py --batch
+    echo "Screensaver installed and selected. Its settings screen is open on the TV."
+  fi
 fi
 
 if [ "$what" = launcher ] || [ "$what" = all ]; then
@@ -264,7 +280,14 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
       # it took Home back after the switch: now it has to go (only if that cannot cost the Wi-Fi)
       if [ "$wraith" = no ] && wraith_answers_home; then wraith=listed; wraith_off || true; fi
     done
-    [ "$ours" = yes ] || return 2
+    if [ "$ours" != yes ]; then
+      # the stock home back now, not in 5 minutes: a restart in between would stop the safety switch and could leave the
+      # wizard's recovery screen as Home (seen on a TCL G07 with the stock home off and the wizard on)
+      printf '%s\n' "pm enable ${STOCK%%/*}" "pm enable $WRAITH" \
+        "cmd role add-role-holder --user 0 android.app.role.HOME ${STOCK%%/*}" "cmd package set-home-activity --user 0 $STOCK" \
+        "touch /data/local/tmp/home_ok" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null || true
+      return 2
+    fi
     "$PY" -I optimize/tv.py "touch /data/local/tmp/home_ok" || return 1
     # the switch may have fired already if ADB was very slow: then the stock home is back
     res=$("$PY" -I optimize/tv.py "cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN") || return 1
@@ -296,14 +319,11 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
   home_skipped=0
   case "$rc" in
     0) ;;
-    5) echo "!! The setup wizard of this TV answers Home and owns its saved Wi-Fi network: turning it off would delete the network and take the TV off Wi-Fi. Nothing was changed."
-       echo "   Tell the person, in Arabic: «على التلفزيون: الإعدادات ← الشبكة والإنترنت، انسَ شبكة الواي فاي (Forget) واتصل فيها من جديد، وقلّي «تم»» (the network then belongs to the system, not the wizard). Then the same command."
-       exit 1 ;;
     4) home_skipped=1
        echo "Home switch skipped: this TV refuses to turn its own home screen off («This command is illegal», seen on a Nokia Streaming Box 8000). It keeps its own home; the stock home is back as it was. The screensaver and the rest of the setup work without it."
        mkdir -p "${URTV_RUN_DIR:-optimize/run}"
        echo "Home switch: skipped, this TV refuses to turn its own home screen off" > "${URTV_RUN_DIR:-optimize/run}/home-skipped.txt" ;;
-    2) echo "!! Home did not open the new launcher. Leave the TV alone: the stock home returns within 5 minutes."
+    2) echo "!! Home did not open the new launcher. The stock home was put back."
        echo "   Some TCL firmware pins Home to the stock launcher; on those sets keep the stock home."
        echo "   If the line above said the setup wizard owns the Wi-Fi, keep the stock home too: never turn the wizard off by hand."
        exit 1 ;;
@@ -324,8 +344,8 @@ fi
 # and share.sh agree. (Only when the report exists; no report, nothing to correct.)
 if [ "$what" != extras ] && [ -f "${URTV_RUN_DIR:-optimize/run}/report.md" ]; then
   rep="${URTV_RUN_DIR:-optimize/run}/report.md"
-  vs=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.screensaver 2> /dev/null | grep -m1 versionName" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vs=""
-  vh=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.home 2> /dev/null | grep -m1 versionName" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vh=""
+  vs=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.screensaver 2> /dev/null | grep versionName | sed -n 1p" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vs=""
+  vh=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.home 2> /dev/null | grep versionName | sed -n 1p" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vh=""
   if [ -n "$vs$vh" ]; then
     line="Versions: screensaver ${vs:-none}, home ${vh:-none}"
     if grep -q '^Versions:' "$rep"; then
