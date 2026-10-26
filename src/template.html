@@ -898,8 +898,8 @@ function isFriday(){
 }
 function prayerName(x){ return x.key === 'Dhuhr' && isFriday() ? 'الجمعة' : x.name; }
 
-// ---- the bar before the adhan: in the last 10 minutes before each prayer «الأذان بعد ٨ دقائق», from the adhan to the iqama
-// «الإقامة بعد ١٢ دقيقة» (the iqama minutes of CONFIG.iqama, none for a Friday's Dhuhr). #adhanbar=0 turns it off.
+// ---- the bar before the adhan: the last 10 minutes «أذان المغرب بعد ٨ دقائق», then to the iqama «إقامة المغرب بعد ١٢ دقيقة» (CONFIG.iqama;
+// none for a Friday's Dhuhr, «أذان الجمعة»). #adhanbar=0 turns it off.
 const ADHAN_BAR_MIN = 10;
 // «٤ دقائق»: what is left to an adhan, in the same words at the same second on the bar and in the panel below (whole minutes of the
 // rounded second; never less than one)
@@ -909,9 +909,9 @@ function adhanBarText(){
   const p = riyadhParts(), mins = p.h*60 + p.mi + p.s/60;
   for(const x of PRAYERS){
     const at = x.h*60 + x.mi, toAdhan = at - mins;
-    if(toAdhan > 0 && toAdhan <= ADHAN_BAR_MIN) return 'الأذان بعد ' + untilAdhan(toAdhan);
+    if(toAdhan > 0 && toAdhan <= ADHAN_BAR_MIN) return 'أذان ' + prayerName(x) + ' بعد ' + untilAdhan(toAdhan);
     const gap = x.key === 'Dhuhr' && isFriday() ? 0 : (CONFIG.iqama[x.key] || 0);
-    if(mins >= at && mins < at + gap) return 'الإقامة بعد ' + humanRemaining(Math.max(60, Math.ceil(at + gap - mins)*60));
+    if(mins >= at && mins < at + gap) return 'إقامة ' + prayerName(x) + ' بعد ' + humanRemaining(Math.max(60, Math.ceil(at + gap - mins)*60));
   }
   return '';
 }

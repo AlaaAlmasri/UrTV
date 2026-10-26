@@ -1486,9 +1486,9 @@ for (const [width, height] of [[461, 250], [1920, 1080], [960, 540]]) {   // lon
   const FRAG = 'city=%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6&lat=24.7136&lon=46.6753&tz=Asia%2FRiyadh&teams=&events=&leagues=&panel=prayers&week=1&genres=&langs=&shows=&minrating=0&photos=30&digits=hindi&cardstyle=current&adhanbar=1&yearstrip=0&adj=0,0,0,2,0&national=all&markets=tasi,spx,btc&mkstyle=arrows&stocks=&slot=matches&cd=&cdname=';
   for (const [when, label, wantCard, wantPanel, wantBar] of [
       ['2026-10-22T13:40:00Z', '16:40', '٥:٤٧ م', 'المغرب ٥:٤٧ م', ''],
-      ['2026-10-22T14:44:00Z', '17:44, three minutes to the moved adhan', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'الأذان بعد ٣ دقائق'],
-      ['2026-10-22T14:46:00Z', '17:46: the unmoved Maghrib has passed, the moved one has not', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'الأذان بعد ١ دقيقة'],
-      ['2026-10-22T14:50:00Z', '17:50: in the iqama wait (17:47 + 10)', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'الإقامة بعد ٧ دقائق']]) {
+      ['2026-10-22T14:44:00Z', '17:44, three minutes to the moved adhan', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'أذان المغرب بعد ٣ دقائق'],
+      ['2026-10-22T14:46:00Z', '17:46: the unmoved Maghrib has passed, the moved one has not', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'أذان المغرب بعد ١ دقيقة'],
+      ['2026-10-22T14:50:00Z', '17:50: in the iqama wait (17:47 + 10)', '٥:٤٧ م', 'المغرب ٥:٤٧ م', 'إقامة المغرب بعد ٧ دقائق']]) {
     for (const [hash, width, height] of [[FRAG, 1920, 1080], [FRAG + '&widget=1', 561, 253]]) {
       const { p, ctx, errors } = await open('tv.html', hash, { width, height });
       await p.clock.setFixedTime(new Date(when));
@@ -2397,7 +2397,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
   await ctx.close();
 }
 
-// ---- the bar before the adhan: «الأذان بعد ٨ دقائق» in the last 10 minutes before each prayer, «الإقامة بعد ١٢ دقيقة» from the adhan
+// ---- the bar before the adhan: «أذان المغرب بعد ٨ دقائق» in the last 10 minutes before each prayer, «إقامة المغرب بعد ١٢ دقيقة» from the adhan
 // to the iqama (Fajr 25, Maghrib 10, the rest 20; none for a Friday's Dhuhr); #adhanbar=0 turns it off. Times held with Date.now.
 const ADHAN_TIMES = "buildPrayers({ Fajr: '04:50', Sunrise: '06:05', Dhuhr: '11:40', Asr: '15:00', Maghrib: '17:45', Isha: '19:15' });";
 const barAt = (p, day, hhmm, ss = '00') => p.evaluate(([iso, times]) => {
@@ -2418,13 +2418,13 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
       asr: await barAt(p, THU, '15:05'), isha: await barAt(p, THU, '19:20'), none: await barAt(p, THU, '13:00') };
     const tag = `adhan bar ${width}x${height} ${digits}`;
     check(`${tag}: no script errors`, !errors.length, errors.join('; '));
-    check(`${tag}: the last 10 minutes: «الأذان بعد …», shown from exactly 10 minutes before, not 11`,
-      !r.m10.hidden && r.m10.text === N('الأذان بعد ١٠ دقائق') && !r.m8.hidden && r.m8.text === N('الأذان بعد ٧ دقائق') && r.m1.text === N('الأذان بعد ١ دقيقة') && r.over10.hidden, JSON.stringify([r.m10, r.m8, r.m1, r.over10]));
-    check(`${tag}: from the adhan to the iqama: «الإقامة بعد …» (Maghrib 10, Fajr 25, Asr and Isha 20, Dhuhr 20)`,
-      r.at.text === N('الإقامة بعد ١٠ دقائق') && r.q5.text === N('الإقامة بعد ٥ دقائق') && r.end.hidden && r.fajr.text === N('الإقامة بعد ٢٥ دقيقة') && r.asr.text === N('الإقامة بعد ١٥ دقيقة')
-      && r.isha.text === N('الإقامة بعد ١٥ دقيقة') && r.dhuhr.text === N('الإقامة بعد ٢٠ دقيقة'), JSON.stringify([r.at.text, r.q5.text, r.end.hidden, r.fajr.text, r.asr.text, r.isha.text, r.dhuhr.text]));
+    check(`${tag}: the last 10 minutes: «أذان المغرب بعد …», shown from exactly 10 minutes before, not 11`,
+      !r.m10.hidden && r.m10.text === N('أذان المغرب بعد ١٠ دقائق') && !r.m8.hidden && r.m8.text === N('أذان المغرب بعد ٧ دقائق') && r.m1.text === N('أذان المغرب بعد ١ دقيقة') && r.over10.hidden, JSON.stringify([r.m10, r.m8, r.m1, r.over10]));
+    check(`${tag}: from the adhan to the iqama: «إقامة المغرب بعد …», each prayer by its own name (Maghrib 10, Fajr 25, Asr and Isha 20, Dhuhr 20)`,
+      r.at.text === N('إقامة المغرب بعد ١٠ دقائق') && r.q5.text === N('إقامة المغرب بعد ٥ دقائق') && r.end.hidden && r.fajr.text === N('إقامة الفجر بعد ٢٥ دقيقة') && r.asr.text === N('إقامة العصر بعد ١٥ دقيقة')
+      && r.isha.text === N('إقامة العشاء بعد ١٥ دقيقة') && r.dhuhr.text === N('إقامة الظهر بعد ٢٠ دقيقة'), JSON.stringify([r.at.text, r.q5.text, r.end.hidden, r.fajr.text, r.asr.text, r.isha.text, r.dhuhr.text]));
     check(`${tag}: Friday's Dhuhr has no iqama countdown, the adhan countdown before it is there; between prayers nothing`,
-      r.dhuhrFri.hidden && !r.beforeFriday.hidden && r.none.hidden, JSON.stringify([r.dhuhrFri, r.beforeFriday.hidden, r.none.hidden]));
+      r.dhuhrFri.hidden && !r.beforeFriday.hidden && r.beforeFriday.text === N('أذان الجمعة بعد ٥ دقائق') && r.none.hidden, JSON.stringify([r.dhuhrFri, r.beforeFriday, r.none.hidden]));
     check(`${tag}: a slim bar at the very top, across the screen`, r.m8.top === 0 && r.m8.h > 12 && r.m8.h < 0.035 * height + 1 && r.m8.w === width, JSON.stringify(r.m8));
     const clear = await p.evaluate(() => document.getElementById('adbar').getBoundingClientRect().bottom <= document.querySelector('.top').getBoundingClientRect().top + 1);
     check(`${tag}: the bar is above the date block and the weather (they start below it)`, clear, JSON.stringify(r.m8));
@@ -2443,12 +2443,12 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
     }, [`2026-10-22T${hhmmss}+03:00`, ADHAN_TIMES]);
     const half = await at('17:40:30');   // 4 min 30 s before Maghrib
     check(`bar and panel at 4 min 30 s before the prayer, ${width}x${height}: both say ٤ دقائق`,
-      !errors.length && half.bar === 'الأذان بعد ٤ دقائق' && half.panel === 'بعد ٤ دقائق', JSON.stringify(half));
+      !errors.length && half.bar === 'أذان المغرب بعد ٤ دقائق' && half.panel === 'بعد ٤ دقائق', JSON.stringify(half));
     const apart = [];
     for (let s = 0; s < 600; s += 3) {   // the last 10 minutes, every 3 seconds
       const t = 17 * 3600 + 35 * 60 + s, hh = [Math.floor(t / 3600), Math.floor(t % 3600 / 60), t % 60].map(n => String(n).padStart(2, '0')).join(':');
       const r = await at(hh);
-      if (r.bar.replace('الأذان ', '') !== r.panel) apart.push(hh + ' ' + r.bar + ' / ' + r.panel);
+      if (r.bar.replace('أذان المغرب ', '') !== r.panel) apart.push(hh + ' ' + r.bar + ' / ' + r.panel);
     }
     check(`bar and panel, every 3 seconds of the last 10 minutes, ${width}x${height}: always the same time`, !apart.length, apart.slice(0, 4).join(' | '));
     await ctx.close();
@@ -3184,10 +3184,10 @@ for (const [w, h] of [[1920, 1080], [1280, 720], [960, 540]]) {
     check('adj: the prayers card lists the moved times and the sunrise as it was', /(الظهر|الجمعة)<\/span><span class="dt">١١:٤٢ ص/.test(r.rows) && /العشاء<\/span><span class="dt">٧:١٤ م/.test(r.rows) && /الشروق<\/span><span class="dt">٦:٠٥ ص/.test(r.rows), r.rows);
     const before = await at(p, '2026-10-22', '11:31', '59');
     const m10 = await at(p, '2026-10-22', '11:32', '00');
-    check('adj: the adhan bar starts 10 minutes before the MOVED Dhuhr (11:42), not before 11:40', before.bar === '' && m10.bar === 'الأذان بعد ١٠ دقائق', JSON.stringify([before.bar, m10.bar]));
+    check('adj: the adhan bar starts 10 minutes before the MOVED Dhuhr (11:42), not before 11:40', before.bar === '' && m10.bar === 'أذان الظهر بعد ١٠ دقائق', JSON.stringify([before.bar, m10.bar]));
     const q = await at(p, '2026-10-22', '11:42', '00'), old = await at(p, '2026-10-22', '11:40', '30');
-    check('adj: the iqama countdown runs from the moved Dhuhr: «الإقامة بعد ٢٠ دقيقة» at 11:42, only the adhan bar before it at 11:40:30',
-      q.bar === 'الإقامة بعد ٢٠ دقيقة' && old.bar === 'الأذان بعد ١ دقيقة', JSON.stringify([q.bar, old.bar]));
+    check('adj: the iqama countdown runs from the moved Dhuhr: «إقامة الظهر بعد ٢٠ دقيقة» at 11:42, only the adhan bar before it at 11:40:30',
+      q.bar === 'إقامة الظهر بعد ٢٠ دقيقة' && old.bar === 'أذان الظهر بعد ١ دقيقة', JSON.stringify([q.bar, old.bar]));
     const nxt = await at(p, '2026-10-22', '11:00');
     check('adj: the next prayer card says Dhuhr at the moved time, and how long is left to it', nxt.name === 'الظهر' && nxt.time === '١١:٤٢ ص' && nxt.count === 'بعد ٤٢ دقيقة', JSON.stringify(nxt));
     const row = await p.evaluate(() => { const c = prayerRowCard(); return c.rows.join('') + '|' + c.title; });
@@ -3204,9 +3204,9 @@ for (const [w, h] of [[1920, 1080], [1280, 720], [960, 540]]) {
     check('adj: at 23:55 the next prayer is the moved Isha, 12:10 ص, in 15 minutes', before.name === 'العشاء' && before.time === '١٢:١٠ ص' && before.count === 'بعد ١٥ دقيقة', JSON.stringify(before));
     const near = "buildPrayers({ Fajr: '04:50', Sunrise: '06:05', Dhuhr: '11:40', Asr: '15:00', Maghrib: '17:45', Isha: '23:30' });";   // +20: Isha at 23:50
     const bar = await at(p, '2026-10-22', '23:40', '00', near), early = await at(p, '2026-10-22', '23:29', '00', near);
-    check('adj: the adhan bar counts to the moved Isha (23:50): ten minutes at 23:40, nothing at 23:29', bar.bar === 'الأذان بعد ١٠ دقائق' && early.bar === '', JSON.stringify([bar.bar, early.bar]));
+    check('adj: the adhan bar counts to the moved Isha (23:50): ten minutes at 23:40, nothing at 23:29', bar.bar === 'أذان العشاء بعد ١٠ دقائق' && early.bar === '', JSON.stringify([bar.bar, early.bar]));
     const fri = await at(p, '2026-10-23', '11:50', '00');   // Friday: Dhuhr 11:40 + 20 = 12:00
-    check("adj: Friday's Dhuhr (+20) is «الجمعة» at 12:00 with its adhan bar and no iqama countdown", fri.name === 'الجمعة' && fri.time === '١٢:٠٠ م' && fri.bar === 'الأذان بعد ١٠ دقائق', JSON.stringify(fri));
+    check("adj: Friday's Dhuhr (+20) is «الجمعة» at 12:00 with its adhan bar and no iqama countdown", fri.name === 'الجمعة' && fri.time === '١٢:٠٠ م' && fri.bar === 'أذان الجمعة بعد ١٠ دقائق', JSON.stringify(fri));
     const friAfter = await at(p, '2026-10-23', '12:05', '00');
     check("adj: after Friday's moved Dhuhr there is no iqama countdown", friAfter.bar === '', JSON.stringify(friAfter));
     await p.evaluate(() => { PRAYERS.length = 0; });

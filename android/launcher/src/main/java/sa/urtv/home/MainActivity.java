@@ -119,7 +119,7 @@ public class MainActivity extends Activity {
     private HomeCard homeCard;
     private NowCard nowCard;   // «يُتلى الآن»: at the right end of the pills row while a surah or a station is on
     private Pill sleepPill;   // «مؤقت النوم», with the minutes left while it runs (shown while it has the focus)
-    private TextView adhanBar;   // «الأذان بعد ٨ دقائق», over the top edge
+    private TextView adhanBar;   // «أذان المغرب بعد ٨ دقائق», over the top edge
     private View clockBlock, bottomBlock;   // the greeting, clock and date; the app title and the dock under it
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
@@ -279,6 +279,7 @@ public class MainActivity extends Activity {
         // the slim bar before the adhan, over the home screen's top edge (the header starts 36 dp down)
         adhanBar = text(12, "sans-serif-medium", 0xFFFFE9B8);
         adhanBar.setGravity(Gravity.CENTER);
+        adhanBar.setMaxLines(1);   // «إقامة العشاء بعد ١٣ دقيقة» is the longest: one line, even at 960×540
         adhanBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0x00DCB86F, 0x57DCB86F, 0x57DCB86F, 0x00DCB86F}));
         adhanBar.setVisibility(View.GONE);
         root.addView(adhanBar, new FrameLayout.LayoutParams(-1, dp(26), Gravity.TOP));
