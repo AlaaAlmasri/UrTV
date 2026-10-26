@@ -17,6 +17,7 @@ python3 tests/reboot_test.py
 python3 tests/tv_identity_test.py
 python3 tests/tv_read_only_test.py
 python3 tests/tv_safety_test.py
+python3 tests/tweaks_trim_test.py
 python3 tests/key_home_test.py
 python3 tests/dock_names_test.py
 python3 tests/dock_sleep_test.py
