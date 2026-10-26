@@ -35,6 +35,11 @@ check("MainActivity: D-pad ends and order are unchanged (wireFocus and moveFocus
 check("MainActivity: the sleep and network names are set on the pill, not drawn on the row", "sleepPill.setLabel(Digits.of(PillText.sleep(left)))" in main
       and "wifiPill.setLabel(PillText.network(" in main)
 
+check("MainActivity: OK on the screensaver pill starts the screensaver (the preview activity, a fresh task), a long OK opens its settings",
+      "saver.setOnClickListener(v -> startSaver())" in main and "saver.setOnLongClickListener(v -> { openPackage(SAVER_PKG); return true; })" in main
+      and 'SAVER_PKG + ".MainActivity"' in main and "FLAG_ACTIVITY_CLEAR_TASK" in main.split("private void startSaver", 1)[1].split("}", 1)[0])
+check("MainActivity: the pill's name is PillText.SAVER, which names the long press", 'pill(PillText.SAVER,' in main)
+
 if not shutil.which("javac"):
     print("SKIP pill text: no javac here")
     sys.exit(1 if failed else 0)

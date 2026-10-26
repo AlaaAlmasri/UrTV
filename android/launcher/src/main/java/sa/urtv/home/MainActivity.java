@@ -65,7 +65,7 @@ import java.util.Map;
  *
  * Adapted from github.com/mihirgupta0900/tv-home (MIT, see android/launcher/LICENSE-tv-home):
  * Arabic text and digits, Hijri date, Thmanyah fonts, the screensaver's gold palette and Saudi photos,
- * clock on the right, and a pill that opens the screensaver's settings.
+ * clock on the right, and a pill that starts the screensaver (a long OK opens its settings).
  */
 public class MainActivity extends Activity {
 
@@ -403,8 +403,9 @@ public class MainActivity extends Activity {
         LinearLayout right = new LinearLayout(this);
         right.setGravity(Gravity.CENTER_VERTICAL);
         right.setClipChildren(false);
-        Pill saver = pill("شاشة التوقف", R.drawable.ic_screensaver);
-        saver.setOnClickListener(v -> openPackage(SAVER_PKG));
+        Pill saver = pill(PillText.SAVER, R.drawable.ic_screensaver);
+        saver.setOnClickListener(v -> startSaver());   // OK starts it, as optimize/start-saver.sh --preview does
+        saver.setOnLongClickListener(v -> { openPackage(SAVER_PKG); return true; });   // a long OK: its settings, where OK used to go
         Pill inputs = pill("المصادر", R.drawable.ic_input);
         inputs.setOnClickListener(v -> showInputs(v));
         wifiPill = pill("واي فاي", R.drawable.ic_wifi);
@@ -1328,6 +1329,13 @@ public class MainActivity extends Activity {
         Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
         if (i == null) i = getPackageManager().getLaunchIntentForPackage(pkg);
         if (i != null) launch(i);
+    }
+
+    /** The screensaver now: its full-screen preview (the same page; Home or Back leaves it). An older app without it opens its settings. */
+    private void startSaver() {
+        Intent i = new Intent().setComponent(new ComponentName(SAVER_PKG, SAVER_PKG + ".MainActivity"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);   // fresh each time, with today's settings
+        if (getPackageManager().resolveActivity(i, 0) != null) launch(i); else openPackage(SAVER_PKG);
     }
 
     static final int GOLD = 0xFFD6AF6B;

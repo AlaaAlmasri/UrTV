@@ -10,6 +10,9 @@ final class PillText {
     /** the words on screen: the name while the pill has the focus, nothing (icon only) otherwise */
     static String shown(String label, boolean focused) { return focused ? label : ""; }
 
+    /** the screensaver pill's name: OK starts the screensaver, a long OK opens its settings, and the focused pill says so */
+    static final String SAVER = "شاشة التوقف · مطوّلًا: الإعدادات";
+
     /** «مؤقت النوم», or with the minutes left while the timer runs: «مؤقت النوم ٢٣ د» */
     static String sleep(int minutesLeft) {
         return minutesLeft <= 0 ? "مؤقت النوم" : "مؤقت النوم " + digits(String.valueOf(minutesLeft)) + " د";
