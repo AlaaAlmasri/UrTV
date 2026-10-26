@@ -143,16 +143,17 @@ def steps():
         if not m:
             continue
         t = datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
-        first, last = first or t, t
+        first, last = min(first or t, t), max(last or t, t)   # steps.log can span a re-run: never assume it is in order
         what, step = m.group(2), m.group(3)
         if what == "start":
             started[step] = t
             if stopped_at:   # the time between a stop and the next try went into finding out why
                 gap = int((t - stopped_at).total_seconds())
-                lines.append(f"[{gap // 60}:{gap % 60:02d} until it was run again]")
+                if gap >= 0:   # a clock or date out of order gives no gap rather than a negative one
+                    lines.append(f"[{gap // 60}:{gap % 60:02d} until it was run again]")
                 stopped_at = None
         elif step in started:
-            took = int((t - started.pop(step)).total_seconds())
+            took = max(0, int((t - started.pop(step)).total_seconds()))
             lines.append(f"{step} {took // 60}:{took % 60:02d}" + ("" if what == "done" else f" STOPPED{m.group(4)}"))
             stopped_at = t if what == "stopped" else None
     total = f"{int((last - first).total_seconds()) // 60} min in all" if first else ""
