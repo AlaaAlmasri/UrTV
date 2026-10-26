@@ -42,9 +42,10 @@ android {
         }
     }
 
-    // the page is built by ../../src/build.py into dist/
+    // the page is built by ../../src/build.py into dist/; only tv.html goes in (copyPage below): dist/urtv.html is the
+    // stand-alone copy with the fonts and photos inlined, which no screen of the app loads
     sourceSets {
-        main { assets.srcDirs = ['../../dist', '../launcher/src/main/assets', '../../assets'] }   // page, Thmanyah fonts, backgrounds/, shared/ (the club lists)
+        main { assets.srcDirs = ['../launcher/src/main/assets', '../../assets', "$buildDir/generated/page"] }   // Thmanyah fonts, backgrounds/, shared/ (the club lists), the page
     }
 
     compileOptions {
@@ -52,3 +53,9 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 }
+
+def copyPage = tasks.register('copyPage', Copy) {
+    from('../../dist') { include 'tv.html' }
+    into "$buildDir/generated/page"
+}
+preBuild.dependsOn copyPage
