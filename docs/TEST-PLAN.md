@@ -61,7 +61,7 @@ Open: «معاينة الشاشة» row, or `adb shell am start -n sa.urtv.scree
 | B2 | Clock | 12-hour Arabic digits, no two digits touching (e.g. ٤٨), gold colon, small gold ص/م at the **upper left**; centred between the card and the right edge; matches the real Riyadh time |
 | B3 | Under clock | «بتوقيت <chosen city>» |
 | B4 | Top right | Hijri date (with هـ) over Gregorian date (Gregorian month name, e.g. أكتوبر) |
-| B5 | Top left (no boxes) | Temperature ° + condition word (or «غبار» in gold); city · high/low; gold line from the left edge; تاسي / S&P 500 / بيتكوين each with ▲ green or ▼ red (or no arrow — never a dash) |
+| B5 | Top left (no boxes) | Temperature ° + condition word, with «غبار» in gold beside it (never instead of it); city · high/low; a small «Open-Meteo · قبل ١٥ د» line under the city; city · high/low; gold line from the left edge; تاسي / S&P 500 / بيتكوين each with ▲ green or ▼ red (or no arrow — never a dash) |
 | B5b | Settings → الأسواق → pick 4 (e.g. تاسي, الذهب, الفضة, بيتكوين) and «عرض الأسواق» → السعر والنسبة, then preview | The four in the order of the list, each with its price (index and bitcoin with no decimals; gold and silver per gram with 2 decimals in ريال), ▲ green / ▼ red and the day's % change; under them «آخر تحديث ٩:١٥ م». Picking a fifth is refused with a message. Offline the last values stay; a market the TV cannot read shows no number and no arrow |
 | B6 | Markets accuracy | Compare arrows with today's TASI, S&P 500 and BTC 24h direction on any finance site |
 | B7 | هذا الأسبوع (set «بجانب الساعة» to المسلسلات first: the default card is the verse card) | Up to 5 shows matching A11–A15 filters, with season/episode, rating, weekday. Changes page every 25 s |

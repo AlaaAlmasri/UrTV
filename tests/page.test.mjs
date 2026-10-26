@@ -531,8 +531,8 @@ for (const panel of ['prayers', 'verse', 'shows']) {
   await p.waitForTimeout(800);
   await p.evaluate(() => {
     document.getElementById('wx-temp').textContent = '٣٨°';
-    document.getElementById('wx-desc').textContent = 'غبار';
-    document.getElementById('wx-desc').classList.add('dust');
+    document.getElementById('wx-desc').textContent = 'صافي';
+    document.getElementById('wx-dust').textContent = 'غبار';
     paintDir(TICKERS[0], true);
     document.getElementById('match-row').innerHTML = '<div class="saved-match">SAVED</div>';
     WX.at = Date.now(); saveWx();   // (a reading fetched a moment ago: older than 3 hours it would not be shown)
@@ -542,10 +542,10 @@ for (const panel of ['prayers', 'verse', 'shows']) {
   await p.waitForTimeout(1500);
   const r = await p.evaluate(() => ({
     temp: document.getElementById('wx-temp').textContent,
-    dust: document.getElementById('wx-desc').classList.contains('dust'),
+    dust: document.getElementById('wx-desc').textContent + '+' + document.getElementById('wx-dust').textContent,
     arrow: document.getElementById('tasi-chg').textContent,
     row: document.getElementById('match-row').textContent.trim() }));
-  check('offline start: weather, arrow and match row kept', r.temp === '٣٨°' && r.dust && r.arrow === '▲' && r.row === 'SAVED', JSON.stringify(r));
+  check('offline start: weather, arrow and match row kept', r.temp === '٣٨°' && r.dust === 'صافي+غبار' && r.arrow === '▲' && r.row === 'SAVED', JSON.stringify(r));
   await ctx.close();
 }
 
@@ -3362,6 +3362,85 @@ const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','matc
   }
   const { p, ctx } = await open('tv.html', 'clocksize=huge');
   check('clocksize: anything else is large', await p.evaluate(() => CONFIG.clockSize === 'large' && !/ck-/.test(document.documentElement.className)));
+  await ctx.close();
+}
+
+// ---- the weather at the top left: the condition and the dust are two facts, and the source with the reading's age is a small line
+{
+  const NOW = new Date('2026-10-22T13:40:00Z');
+  const wxNet = (pm, ageState) => r => {
+    const u = r.request().url();
+    const ok = body => { r.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) }); return true; };
+    if (/air-quality-api/.test(u)) return ageState.off ? (r.abort(), true) : ok({ current: { pm10: pm, dust: 0 } });
+    if (/api\.open-meteo\.com\/v1\/forecast/.test(u)) return ageState.off ? (r.abort(), true)
+      : ok({ current: { temperature_2m: 38, weather_code: 2 }, daily: { time: ['2026-10-22'], temperature_2m_max: [41], temperature_2m_min: [27], weather_code: [2] } });
+    return false;
+  };
+  const wxRead = p => p.evaluate(() => ({ d: document.getElementById('wx-desc').textContent, dust: document.getElementById('wx-dust').textContent,
+    src: document.getElementById('wx-src').textContent, line: document.querySelector('.wxline').innerText.replace(/\s+/g, ' ').trim() }));
+  for (const [pm, dust, why] of [[60, '', 'clean air: the condition alone'], [200, 'غبار', 'dust: beside the condition'], [450, 'غبار كثيف', 'heavy dust: beside the condition']]) {
+    const { p, ctx, errors } = await open('tv.html', '', { net: wxNet(pm, {}), now: NOW });
+    await p.waitForTimeout(600);
+    const r = await wxRead(p);
+    check(`weather ${why}`, !errors.length && r.d === 'غائم جزئياً' && r.dust === dust, JSON.stringify(r) + errors);
+    check(`weather ${pm}: the source and «الآن» under the city`, r.src === 'Open-Meteo · الآن', r.src);
+    await ctx.close();
+  }
+  {   // the age counts on, with no request; older than three hours it all goes
+    const { p, ctx } = await open('tv.html', '', { net: wxNet(0, {}), now: NOW });
+    await p.waitForTimeout(600);
+    const at = min => p.evaluate(m => { WX.at = Date.now() - m * 60000; wxExpire(); wxSource(); }, min);   // the page's clock is fixed: the reading gets older instead
+    await at(15);
+    const a = await wxRead(p);
+    await at(75);
+    const b = await wxRead(p);
+    await at(190);
+    const c = await wxRead(p);
+    check('weather age: «قبل ١٥ د», then hours, then nothing once the reading is stale',
+      a.src === 'Open-Meteo · قبل ١٥ د' && /^Open-Meteo · قبل [٠-٩]+ س$/.test(b.src) && c.src === '' && c.d === '', JSON.stringify([a.src, b.src, c.src]));
+    await ctx.close();
+  }
+  for (const [w, h] of [[960, 540], [1280, 720], [1920, 1080]]) {
+    for (const hash of ['', 'markets=tasi,aramco,gold,btc&mkstyle=prices', 'mkbar=off']) {
+      const { p, ctx } = await open('tv.html', hash, { width: w, height: h, net: wxNet(450, {}), now: NOW });
+      await p.waitForTimeout(600);
+      const r = await p.evaluate(() => {
+        const b = s => document.querySelector(s).getBoundingClientRect(), m = b('.markets'), d = b('.dates'), c = b('.clock');
+        const off = [...document.querySelectorAll('.markets *')].filter(e => { const x = e.getBoundingClientRect(); return x.width && (x.left < -1 || x.right > innerWidth + 1); }).map(e => e.id || e.className);
+        return { off, overDates: m.right > d.left - 8 && m.bottom > d.top && m.top < d.bottom, overClock: m.bottom > c.top && m.left < c.right && m.right > c.left && m.top < c.bottom,
+          src: document.getElementById('wx-src').getBoundingClientRect().height > 0, line: document.querySelector('.wxline').innerText.replace(/\s+/g, ' ').trim() };
+      });
+      check(`weather with dust and its source at ${w}x${h} (${hash || 'default'}): fits, clear of the date and the clock`, !r.off.length && !r.overDates && !r.overClock && r.src && /غائم جزئياً/.test(r.line) && /غبار كثيف/.test(r.line), JSON.stringify(r));
+      if (process.env.SHOTS && w === 1920 && hash === '') await p.screenshot({ path: path.join(process.env.SHOTS, 'weather-dust-source.png'), clip: { x: 0, y: 0, width: 700, height: 220 } });
+      await ctx.close();
+    }
+  }
+}
+
+// ---- F32: a change of look only (card style, the card's place, the clock's size) offline keeps the games already shown;
+// a change of what the saved words are made of (the digits, the teams) does not reuse them
+{
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  await ctx.route(/^https?:/, r => r.abort());
+  const p = await ctx.newPage();
+  await p.goto(page('tv.html') + '#gap=0&teams=136013&cardstyle=current');
+  await p.waitForTimeout(800);
+  await p.evaluate(() => { document.getElementById('match-row').innerHTML = '<div class="saved-match">SAVED</div>'; MATCH_OK_AT = Date.now(); saveSnap(); });
+  const row = async hash => {
+    await carry(p);
+    await p.goto(page('tv.html') + '#' + hash);
+    await p.reload();
+    await p.waitForTimeout(1200);
+    return p.evaluate(() => document.getElementById('match-row').textContent.trim());
+  };
+  for (const [hash, want, why] of [['gap=0&teams=136013&cardstyle=glass1', 'SAVED', 'the card style changed'],
+      ['gap=0&teams=136013&cardstyle=dark3&clocksize=small', 'SAVED', 'the style and the clock size changed'],
+      ['gap=0&teams=136013&panel=verse&adhanbar=0&yearstrip=1', 'SAVED', 'the card, the bar and the strip changed'],
+      ['gap=0&teams=136013&digits=latin', null, 'the digits changed (the saved words would have the wrong ones)'],
+      ['gap=0&teams=136137', null, 'another team']]) {
+    const got = await row(hash);
+    check(`offline, ${why}: ${want ? 'the games stay' : 'the old row is not reused'}`, want ? got === want : got !== 'SAVED', got);
+  }
   await ctx.close();
 }
 

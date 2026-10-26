@@ -461,10 +461,13 @@
     font-size:clamp(19px,1.86vw,37px);font-weight:500;color:var(--sand)}
   .wxt{font-family:'ThmanyahDisplay','Thmanyah',serif;font-weight:700;color:#FFFCF2;direction:ltr;
     font-variant-numeric:tabular-nums}
-  .wxd.dust{color:#E8B86A}
+  .wxdust{color:#E8B86A;font-size:.82em}   /* the dust, beside the condition and not instead of it */
+  .wxdust:not(:empty)::before{content:'·';margin-inline-end:.5em;color:rgba(214,175,107,.7)}
+  .wxsrc{margin-top:.3vh;font-size:clamp(10px,.86vw,17px);font-weight:300;color:var(--dim);opacity:.8;white-space:nowrap}
+  .wxsrc:empty{display:none}
   .wxsub{margin-top:.55vh;font-size:clamp(12px,1.06vw,21px);font-weight:300;color:var(--dim);white-space:nowrap}
   .wxr:not(:empty)::before{content:'  ·  ';white-space:pre;color:rgba(214,175,107,.7)}
-  .wxt:empty,.wxd:empty,.wxr:empty{display:none}
+  .wxt:empty,.wxd:empty,.wxr:empty,.wxdust:empty{display:none}
   .rule.l{margin-left:0;margin-right:auto;background:linear-gradient(90deg,var(--gold),rgba(var(--gold-rgb),0))}
   .mk{margin-top:1.2vh;display:flex;justify-content:flex-end;gap:1.6em;white-space:nowrap;
     font-size:clamp(12px,1.06vw,21px);font-weight:400;color:#D8CDB6}
@@ -529,8 +532,9 @@
     </div>
 
     <div class="markets">
-      <div class="wxline"><span class="wxt" id="wx-temp"></span><span class="wxd" id="wx-desc"></span></div>
+      <div class="wxline"><span class="wxt" id="wx-temp"></span><span class="wxd" id="wx-desc"></span><span class="wxdust" id="wx-dust"></span></div>
       <div class="wxsub"><span id="wx-city">الرياض</span><span class="wxr" id="wx-range"></span></div>
+      <div class="wxsrc" id="wx-src"></div>
       <div class="rule l"></div>
       <div class="mk">
         <span class="m"><span>تاسي</span><span id="tasi-chg" class="delta" hidden></span></span>
@@ -691,6 +695,13 @@ CONFIG.panel = CONFIG.cards[0] || 'none';   // the first one, for what only need
 const USES_OF = {smart:['matches','adhkar','prayers','prayerrow','hourly'], today:['prayers','matches','tasks']};
 const USES = k => CONFIG.cards.some(c => c === k || (USES_OF[c] || []).includes(k));
 
+// The panels' snapshot is keyed by the link without the settings that only change how things look (the card's style and place, the clock's
+// size, the strips, the photo timing): changing one of those offline must not lose the games already on screen. What changes the words or
+// the markup inside the saved panels (the teams, leagues, digits, slot, markets, their style and switch…) stays in the key.
+const SNAP_LOOK = ['cardstyle', 'panel', 'week', 'clocksize', 'adhanbar', 'yearstrip', 'national', 'photos', 'adj', 'own', 'ownmode', 'gap'];
+function snapLink(){
+  return location.hash.replace(/^#/, '').split('&').filter(kv => kv && !SNAP_LOOK.includes(kv.split('=')[0])).join('&');
+}
 // What the page keeps in localStorage is keyed by what it is for, not by the whole link (which changes with every setting and left a
 // copy behind each time): the weather by the city, the prices by the symbols, the games' time by the clubs. The panels' snapshot
 // is the one that depends on the whole link; pruneStorage() below keeps the few newest of those and drops the old link-keyed copies.
@@ -701,7 +712,7 @@ const LS = {
   stocks: 'stocks:' + CONFIG.stocks.slice().sort().join(','),
   mk: 'mk:' + CONFIG.markets.join(','),   // the on/off switch is not in the key: the prices are the same
   matches: 'matchesOk:' + CONFIG.teamIds.join(',') + '|' + CONFIG.leagues.join(','),
-  snap: 'snap6:' + location.hash,
+  snap: 'snap6:' + snapLink(),
 };
 
 // every number on the screen goes through ar() or a formatter built on NU, so CONFIG.digits decides them all
@@ -2784,7 +2795,17 @@ try{ WX = Object.assign(WX, JSON.parse(localStorage.getItem(LS.wx) || '{}')); }c
 const saveWx = () => { try{ localStorage.setItem(LS.wx, JSON.stringify(WX)); }catch(e){} };
 function wxExpire(){
   if(Date.now() - WX.at < WX_STALE_MS) return;
-  ['wx-temp', 'wx-desc', 'wx-range'].forEach(id => { const el = document.getElementById(id); if(el){ setText(el, ''); el.classList.remove('dust'); } });
+  ['wx-temp', 'wx-desc', 'wx-dust', 'wx-range', 'wx-src'].forEach(id => { const el = document.getElementById(id); if(el) setText(el, ''); });
+}
+// «Open-Meteo · قبل ١٥ د»: where the weather comes from and how old the reading is (kept up to date with the clock, no request)
+function wxAgeText(ms){
+  const m = Math.floor(ms / 60000);
+  return m < 1 ? 'الآن' : m < 60 ? 'قبل ' + ar(m) + ' د' : 'قبل ' + ar(Math.floor(m / 60)) + ' س';
+}
+function wxSource(){
+  const el = document.getElementById('wx-src');
+  if(!el) return;
+  setText(el, WX.at && Date.now() - WX.at < WX_STALE_MS ? 'Open-Meteo · ' + wxAgeText(Date.now() - WX.at) : '');
 }
 async function loadWeather(){
   const q = `latitude=${CONFIG.latitude}&longitude=${CONFIG.longitude}&timezone=${encodeURIComponent(CONFIG.timezone)}`;
@@ -2800,7 +2821,7 @@ async function loadWeather(){
     setText(document.getElementById('wx-temp'), ar(Math.round(j.current.temperature_2m)) + '°');
     const d = document.getElementById('wx-desc');
     setText(d, WX_CODES[j.current.weather_code] || '');
-    d.classList.remove('dust');
+    wxSource();
     const hi = j.daily?.temperature_2m_max?.[0], lo = j.daily?.temperature_2m_min?.[0];
     setText(document.getElementById('wx-range'),
       (hi != null && lo != null) ? `${ar(Math.round(hi))}° / ${ar(Math.round(lo))}°` : '');
@@ -2819,18 +2840,14 @@ async function loadWeather(){
     if(slotNow() === 'weather') renderSlot();
   }catch(e){ return; }   // keep the last reading; with none only the city shows
 
-  // dust overrides the condition word: PM10 in µg/m³
+  // the dust is told beside the condition (never instead of it): PM10 in µg/m³
   try{
     const r = await fetchT(`https://air-quality-api.open-meteo.com/v1/air-quality?${q}&current=pm10,dust`, 12000);
     if(!r.ok) throw 0;
     const c = (await r.json()).current || {};
     WX.pm = Math.max(c.pm10 || 0, c.dust || 0); WX.pmAt = Date.now(); saveWx();
   }catch(e){}                                  // no answer: the last dust reading stands, not a clear sky
-  if(WX.pm >= 150 && Date.now() - WX.pmAt < WX_STALE_MS){
-    const d = document.getElementById('wx-desc');
-    setText(d, WX.pm >= 400 ? 'غبار كثيف' : 'غبار');
-    d.classList.add('dust');
-  }
+  setText(document.getElementById('wx-dust'), WX.pm >= 150 && Date.now() - WX.pmAt < WX_STALE_MS ? (WX.pm >= 400 ? 'غبار كثيف' : 'غبار') : '');
 }
 
 // night dimming: transparent by day, dark after 21:00 and before 07:00
@@ -3155,7 +3172,7 @@ function boot(){
   if(CONFIG.clockSize !== 'large') document.documentElement.classList.add('ck-' + CONFIG.clockSize);
   buildMarkets();
   restoreSnap();
-  paintMkUp(); wxExpire();
+  paintMkUp(); wxExpire(); wxSource();
   setTimeout(saveSnap, 15*1000);   // the dream can be killed before pagehide
   setInterval(saveSnap, 60*1000);
   addEventListener('pagehide', saveSnap);
@@ -3177,7 +3194,7 @@ function boot(){
   nowPlayingTick();
   setInterval(nowPlayingTick, 60*1000);
   setInterval(tickClock, 1000);
-  setInterval(()=>{ tickDates(); tickPrayer(); tickOccasion(); wxExpire(); if(!SLOT_MATCHES) renderSlot(); }, 15000);
+  setInterval(()=>{ tickDates(); tickPrayer(); tickOccasion(); wxExpire(); wxSource(); if(!SLOT_MATCHES) renderSlot(); }, 15000);
   if(SLOT_MATCHES){   // the matches timers run only while the slot shows matches
     setInterval(() => renderMatches(false), 60000);
     // 15 s a page (two games), 10 s once a league makes more than 3 pages: a round of 9 games passes in 50 s, not 75

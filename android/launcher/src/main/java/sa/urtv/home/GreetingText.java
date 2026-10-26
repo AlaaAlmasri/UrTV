@@ -46,17 +46,17 @@ final class GreetingText {
         }
     }
 
-    /** PM10 or dust in µg/m³ from which the air is «غبار», and «غبار كثيف»: the page's thresholds (it overrides its condition word) */
+    /** PM10 or dust in µg/m³ from which the air is «غبار», and «غبار كثيف»: the page's thresholds (told beside its condition word) */
     static final double DUST = 150, HEAVY_DUST = 400;
 
-    /** The sky's word, or «غبار» / «غبار كثيف» when the dust level (the larger of Open-Meteo's pm10 and dust) says so. */
+    /** The sky's word, and beside it (not instead of it) «وغبار» / «وغبار كثيف» when the dust level (the larger of Open-Meteo's pm10 and dust) says so. */
     static String skyWord(int code, double dust) {
-        if (dust >= HEAVY_DUST) return "غبار كثيف";
-        if (dust >= DUST) return "غبار";
-        return sky(code);
+        String sky = sky(code);
+        String d = dust >= HEAVY_DUST ? "غبار كثيف" : dust >= DUST ? "غبار" : "";
+        return d.isEmpty() ? sky : sky.isEmpty() ? d : sky + " و" + d;
     }
 
-    /** «سماء صافية في الرياض، ٣١°» (no «·» beside a digit: the TV's font draws it as ٠); a code we have no word for gives just «الرياض، ٣١°»; dust (0 when unknown) takes the word over. */
+    /** «سماء صافية في الرياض، ٣١°» (no «·» beside a digit: the TV's font draws it as ٠); a code we have no word for gives just «الرياض، ٣١°»; dust (0 when unknown) is told beside the sky: «سماء صافية وغبار في الرياض، ٣٥°». */
     static String weather(int code, double dust, String city, double temp, boolean latin) {
         String sky = skyWord(code, dust);
         String place = sky.isEmpty() ? city : sky + " في " + city;

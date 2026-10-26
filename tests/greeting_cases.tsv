@@ -19,9 +19,9 @@ sun	الغروب	17:57	hindi	الغروب ٥:٥٧ م	sunset
 sun	الشروق	05:48	hindi	الشروق ٥:٤٨ ص	sunrise
 sun	الغروب	00:05	latin	الغروب 12:05 ص	midnight in Latin digits
 sun	الغروب	12:00	hindi	الغروب ١٢:٠٠ م	noon
-weather	0	150	الرياض	35	hindi	غبار في الرياض، ٣٥°	dust at 150 beats a clear sky
+weather	0	150	الرياض	35	hindi	سماء صافية وغبار في الرياض، ٣٥°	dust at 150 is told beside a clear sky, not instead of it
 weather	0	149.9	الرياض	35	hindi	سماء صافية في الرياض، ٣٥°	just under 150: the sky
-weather	0	399	الرياض	35	hindi	غبار في الرياض، ٣٥°	399 is dust
-weather	0	400	الرياض	35	hindi	غبار كثيف في الرياض، ٣٥°	400 and over is heavy dust
-weather	63	820	الرياض	35	latin	غبار كثيف في الرياض، 35°	dust beats rain too, as on the screensaver
+weather	0	399	الرياض	35	hindi	سماء صافية وغبار في الرياض، ٣٥°	399 is dust
+weather	0	400	الرياض	35	hindi	سماء صافية وغبار كثيف في الرياض، ٣٥°	400 and over is heavy dust
+weather	63	820	الرياض	35	latin	أمطار وغبار كثيف في الرياض، 35°	dust is beside the rain, as on the screensaver
 weather	42	200	الرياض	31	hindi	غبار في الرياض، ٣١°	a code with no word still gets the dust word
