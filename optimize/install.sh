@@ -264,7 +264,14 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
       # it took Home back after the switch: now it has to go (only if that cannot cost the Wi-Fi)
       if [ "$wraith" = no ] && wraith_answers_home; then wraith=listed; wraith_off || true; fi
     done
-    [ "$ours" = yes ] || return 2
+    if [ "$ours" != yes ]; then
+      # the stock home back now, not in 5 minutes: a restart in between would stop the safety switch and could leave the
+      # wizard's recovery screen as Home (seen on a TCL G07 with the stock home off and the wizard on)
+      printf '%s\n' "pm enable ${STOCK%%/*}" "pm enable $WRAITH" \
+        "cmd role add-role-holder --user 0 android.app.role.HOME ${STOCK%%/*}" "cmd package set-home-activity --user 0 $STOCK" \
+        "touch /data/local/tmp/home_ok" "input keyevent KEYCODE_HOME" | "$PY" -I optimize/tv.py --batch > /dev/null || true
+      return 2
+    fi
     "$PY" -I optimize/tv.py "touch /data/local/tmp/home_ok" || return 1
     # the switch may have fired already if ADB was very slow: then the stock home is back
     res=$("$PY" -I optimize/tv.py "cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN") || return 1
@@ -296,14 +303,11 @@ if [ "$what" = launcher ] || [ "$what" = all ]; then
   home_skipped=0
   case "$rc" in
     0) ;;
-    5) echo "!! The setup wizard of this TV answers Home and owns its saved Wi-Fi network: turning it off would delete the network and take the TV off Wi-Fi. Nothing was changed."
-       echo "   Tell the person, in Arabic: «على التلفزيون: الإعدادات ← الشبكة والإنترنت، انسَ شبكة الواي فاي (Forget) واتصل فيها من جديد، وقلّي «تم»» (the network then belongs to the system, not the wizard). Then the same command."
-       exit 1 ;;
     4) home_skipped=1
        echo "Home switch skipped: this TV refuses to turn its own home screen off («This command is illegal», seen on a Nokia Streaming Box 8000). It keeps its own home; the stock home is back as it was. The screensaver and the rest of the setup work without it."
        mkdir -p "${URTV_RUN_DIR:-optimize/run}"
        echo "Home switch: skipped, this TV refuses to turn its own home screen off" > "${URTV_RUN_DIR:-optimize/run}/home-skipped.txt" ;;
-    2) echo "!! Home did not open the new launcher. Leave the TV alone: the stock home returns within 5 minutes."
+    2) echo "!! Home did not open the new launcher. The stock home was put back."
        echo "   Some TCL firmware pins Home to the stock launcher; on those sets keep the stock home."
        echo "   If the line above said the setup wizard owns the Wi-Fi, keep the stock home too: never turn the wizard off by hand."
        exit 1 ;;
