@@ -51,36 +51,21 @@ final class OwnAdhan {
         return OwnAdhanText.refuse(src.length(), ms);
     }
 
-    /** Keeps src as the one recording, replacing the old. null when done, else why not; src is gone either way if it is in.tmp. */
+    /**
+     * Keeps src as the one recording, replacing the old. null when done, else why not; src is gone either way if it is in.tmp.
+     * The old recording stays until the new one is whole and in place (SafeReplace): a refusal or a failure leaves it playing.
+     */
     static synchronized String keep(Context c, File src) {
         String why = check(src);
-        if (why.isEmpty()) {
-            File dest = file(c);
-            if (dest.exists() && !dest.delete()) why = "no room to keep it";
-            else if (src.equals(incoming(c))) {
-                if (!src.renameTo(dest)) why = "no room to keep it";
-            } else {
-                why = copy(src, dest);
-            }
-        }
+        if (why.isEmpty()) why = SafeReplace.replace(src, file(c), src.equals(incoming(c)), SafeReplace.FILES);
         if (src.equals(incoming(c)) && src.exists()) src.delete();   // never leave a refused file to be taken for the next one
         return why.isEmpty() ? null : why;
     }
 
-    private static String copy(File src, File dest) {
-        try (InputStream in = new FileInputStream(src); java.io.OutputStream out = new java.io.FileOutputStream(dest)) {
-            byte[] buf = new byte[16384];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            return "";
-        } catch (IOException e) {
-            dest.delete();
-            return "cannot copy it (" + e.getMessage() + ")";
-        }
-    }
-
     static synchronized void clear(Context c) {
         file(c).delete();
+        new File(c.getFilesDir(), "adhan-own.m4a.new").delete();
+        new File(c.getFilesDir(), "adhan-own.m4a.old").delete();
         incoming(c).delete();
     }
 }
