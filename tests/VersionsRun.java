@@ -21,6 +21,13 @@ public final class VersionsRun {
         check("a bare 4 is 4.0", Versions.compare("4", "4.0") == 0 && newer("4", "3.30"), "");
         check("what does not parse is null", Versions.parse("abc") == null && Versions.parse(null) == null && Versions.parse("") == null
                 && Versions.parse("3.x") == null && Versions.parse("-1.2") == null && Versions.compare("x", "3.1") == null, "");
+        check("version.txt: 3.51 with its newline", "3.51".equals(Versions.fromText("3.51\n")), "");
+        check("version.txt: a page or an error is not a version", Versions.fromText("<html>404</html>") == null && Versions.fromText("") == null
+                && Versions.fromText(null) == null && Versions.fromText("3.51 extra") == null && Versions.fromText("Not Found") == null, "");
+        check("redirect to the numbered tag", "3.51".equals(Versions.fromTag("https://github.com/tshi-dev/UrTV/releases/tag/v3.51")), "");
+        check("redirect to apk-latest (what GitHub gives today) is not a version", Versions.fromTag("https://github.com/tshi-dev/UrTV/releases/tag/apk-latest") == null
+                && Versions.fromTag("https://github.com/tshi-dev/UrTV/releases/tag/apk-next") == null && Versions.fromTag(null) == null, "");
+        check("3.100 from the file is newer than 3.99", newer(Versions.fromText("3.100"), "3.99"), "");
         System.exit(failed == 0 ? 0 : 1);
     }
 }
