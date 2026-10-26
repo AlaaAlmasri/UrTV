@@ -3292,6 +3292,79 @@ for (const [style, w, h] of [['current', 1920, 1080], ['dark1', 1920, 1080], ['g
   await ctx.close();
 }
 
+// ---- fetchT: the deadline covers the body too (stalled headers, stalled body, 429, empty body, invalid JSON)
+{
+  const { createServer } = await import('node:http');
+  const srv = createServer((req, res) => {
+    const h = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+    if (req.url === '/headers') return;                                   // never answers
+    if (req.url === '/body') { res.writeHead(200, h); res.write('{"a":'); return; }   // headers, then silence
+    if (req.url === '/429') { res.writeHead(429, h); return res.end('{"x":1}'); }
+    if (req.url === '/empty') { res.writeHead(200, h); return res.end(); }
+    if (req.url === '/bad') { res.writeHead(200, h); return res.end('<html>'); }
+    res.writeHead(200, h); res.end('{"ok":true}');
+  });
+  await new Promise(r => srv.listen(0, 'localhost', r));
+  const base = 'http://localhost:' + srv.address().port;
+  const { p, ctx } = await open('tv.html', 'panel=prayers', { net: r => { if (r.request().url().startsWith(base)) { r.continue(); return true; } return false; } });
+  const probe = (path, how) => p.evaluate(async ([u, how]) => {
+    const t0 = performance.now();
+    try { const r = await fetchT(u, 700); const v = how === 'text' ? await r.text() : how === 'json' ? await r.json() : null; return { ok: r.ok, status: r.status, v, ms: performance.now() - t0 }; }
+    catch (e) { return { err: e && e.name || String(e), ms: performance.now() - t0 }; }
+  }, [base + path, how]);
+  let r = await probe('/ok', 'json');
+  check('fetchT: a good answer reads as before', r.ok && r.status === 200 && r.v.ok === true, JSON.stringify(r));
+  r = await probe('/body', 'json');
+  check('fetchT: a body that stalls after the headers ends at the deadline', r.err && r.ms > 500 && r.ms < 3000, JSON.stringify(r));
+  r = await probe('/headers', 'json');
+  check('fetchT: headers that never come end at the deadline', r.err && r.ms > 500 && r.ms < 3000, JSON.stringify(r));
+  r = await probe('/429', null);
+  check('fetchT: 429 keeps its status and ok=false', r.ok === false && r.status === 429, JSON.stringify(r));
+  r = await probe('/empty', 'text');
+  check('fetchT: an empty body reads as an empty text', r.ok && r.v === '', JSON.stringify(r));
+  r = await probe('/empty', 'json');
+  check('fetchT: an empty body is a JSON error, not a hang', r.err === 'SyntaxError', JSON.stringify(r));
+  r = await probe('/bad', 'json');
+  check('fetchT: invalid JSON is a JSON error', r.err === 'SyntaxError', JSON.stringify(r));
+  await ctx.close();
+  srv.closeAllConnections?.(); srv.close();
+}
+
+// ---- the refresh start offset: bounded by the task's period (a 2-minute poll starts within 4 minutes at worst), slow tasks keep the spread
+for (const j of [0, 15, 29]) {
+  const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
+  await ctx.route(/^https?:/, r => r.abort());
+  await ctx.addInitScript(v => { try { localStorage.setItem('jitter', v); localStorage.setItem('photoIndex', '[]'); } catch (e) {} }, String(j));
+  const p = await ctx.newPage();
+  await p.clock.install({ time: new Date('2026-10-23T12:00:00Z') });
+  await p.goto(page('tv.html') + '#teams=136013&gap=0');
+  await p.evaluate(() => { window.__fast = 0; window.__slow = 0; periodic(() => { window.__fast++; }, 2 * 60000); periodic(() => { window.__slow++; }, 30 * 60000); });
+  await p.clock.runFor(4 * 60000);
+  const fast = await p.evaluate(() => window.__fast);
+  check(`jitter ${j} min: the 2-minute poll has run within 4 minutes`, fast >= 1, 'ran ' + fast);
+  await p.clock.runFor(25 * 60000);   // 29 minutes in: the 30-minute task is not due before its period
+  const slow30 = await p.evaluate(() => window.__slow);
+  await p.clock.runFor(31 * 60000);   // 60 minutes in: late by at most 29 minutes
+  const slow60 = await p.evaluate(() => window.__slow);
+  check(`jitter ${j} min: a 30-minute task keeps its spread (not before 30 min, started by 60 min)`, slow30 === 0 && slow60 >= 1, `${slow30} ${slow60}`);
+  await ctx.close();
+}
+{   // fixtures with a game under way: its live score is asked for at once, not at the next 2-minute tick
+  const asked = [];
+  const start = new Date(Date.now() - 20 * 60000).toISOString().slice(0, 19);
+  const { p, ctx } = await open('tv.html', 'teams=136013&panel=matches', { net: r => {
+    const u = r.request().url();
+    if (!u.includes('thesportsdb.com')) return false;
+    asked.push(u);
+    const body = u.includes('eventsnext.php') ? { events: [{ idEvent: 'live1', strHomeTeam: 'Al-Hilal', strAwayTeam: 'Al-Nassr', strTimestamp: start, strStatus: '1H' }] } : { results: null, events: null };
+    r.fulfill({ json: body, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return true;
+  } });
+  await p.waitForTimeout(1500);
+  check('a game under way after the first fixtures load: its live lookup follows at once', asked.some(u => u.includes('lookupevent.php?id=live1')), asked.join(' '));
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failed ? `\n${failed} failed` : '\nall page tests passed');
 process.exit(failed ? 1 : 0);

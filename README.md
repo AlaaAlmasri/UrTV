@@ -166,8 +166,9 @@ docs/                 the agent prompts (setup, recreate), what we learned on re
 tests/run.sh          every check: build, data, fonts, scripts, private data, «تلاوة» and the adhan, flaky-ADB upload, the screen in a browser
 ```
 
-A push to `master` builds both APKs in GitHub Actions and publishes them to `apk-latest` and a numbered `v3.N`
-release; a push to `next` publishes `apk-next` instead (a test build). `tests/run.sh` runs on `master`, `next`,
+A push to `master` builds both APKs in GitHub Actions, once `tests/run.sh` has passed in the same run, and publishes them
+to `apk-latest` (with a `version.txt`, the number the settings screen shows as the newest) and a numbered `v3.N`
+release; a push to `next` publishes `apk-next` instead (a test build, no wait for the checks). `tests/run.sh` runs on `master`, `next`,
 `content` and pull requests. Local Android build (needs the SDK): `python3 src/build.py && gradle -p android assembleRelease`
 (signed with the debug key; the release key lives only in the repository's secrets).
 
