@@ -2912,9 +2912,14 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
   await p.evaluate(() => { const now = Date.now(), seen = {}; for (let i = 0; i < 9; i++) { localStorage.setItem('snap6:#n' + i, '[]'); seen['snap6:#n' + i] = now - (i + 1) * 36e5; }
     localStorage.setItem('lsSeen', JSON.stringify(seen)); localStorage.setItem('forecast:5.000,6.000', '[]'); const s2 = JSON.parse(localStorage.getItem('lsSeen')); s2['forecast:5.000,6.000'] = now - 15 * 864e5; localStorage.setItem('lsSeen', JSON.stringify(s2)); });
   await p.waitForTimeout(500);   // Chromium writes storage out a moment after the write; the page must not start before that
+  // the copy for another city, 15 days unused, is put there at the start of every load from here on (not left to the browser's write-out, which
+  // a boot can outrun: a boot that found it «just seen» would then keep it for two weeks more)
+  await ctx.addInitScript(() => { try { const k = 'forecast:5.000,6.000', seen = JSON.parse(localStorage.getItem('lsSeen') || '{}') || {};
+    seen[k] = Date.now() - 15 * 864e5; localStorage.setItem('lsSeen', JSON.stringify(seen)); localStorage.setItem(k, '[]'); } catch (e) {} });
   await carry(p); await p.goto('about:blank'); await p.goto(page('tv.html') + '#gap=0&lat=21.5433&lon=39.1728&panel=hourly&cardstyle=dark1&teams=');   // (a new page: a changed #hash alone is no reload)
   await p.waitForTimeout(500);
-  const after = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('snap6:')).length);
+  // the other copies, not counting this page's own: whether its own copy was written out before the boot pruned is the browser's timing
+  const after = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('snap6:') && k !== LS.snap).length);
   let gone = await p.evaluate(() => localStorage.getItem('forecast:5.000,6.000'));
   // Chromium writes the storage out a moment after the page's own writes (the known flake of this file, see carry()): the pruning is idempotent,
   // so a boot that raced the write is followed by up to two more; a pruning that does not work leaves the key every time
@@ -2924,7 +2929,7 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
     await p.waitForTimeout(500);
     gone = await p.evaluate(() => localStorage.getItem('forecast:5.000,6.000'));
   }
-  check('storage: the link-keyed snapshots are kept to the newest six (this page\'s own included)', after <= 6, String(after));
+  check('storage: the other link-keyed snapshots are kept to the newest six (eleven were there)', after <= 6, String(after));
   check('storage: a copy for another city unused for two weeks is dropped', gone === null);
   await ctx.close();
 }
