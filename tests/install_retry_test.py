@@ -33,7 +33,9 @@ case "$1" in
           [ "$FIRST_DROP" = stock ] && [ "$n" = 1 ] && echo stock > "$T/home"
           log drop; exit 1
         fi
+        [ "$NOHOME" = yes ] && { echo stock > "$T/home"; exit 0; }   # firmware or the wizard keeps Home
         echo ours > "$T/home" ;;
+      *"pm enable"*"touch /data/local/tmp/home_ok"*) log restore-stock; echo stock > "$T/home" ;;
       *) log other-batch ;;
     esac
     exit 0 ;;
@@ -81,7 +83,7 @@ while [ $# -gt 0 ]; do [ "$1" = -o ] && : > "$2"; shift; done
 '''
 
 
-def run(name, fail_switches, first_drop, down_polls=0, verify="", verifier=None, curl_mode="", vanish="", illegal="", wraith_home="", wifi="", install_mode=""):
+def run(name, fail_switches, first_drop, down_polls=0, verify="", verifier=None, curl_mode="", vanish="", illegal="", wraith_home="", wifi="", nohome="", install_mode=""):
     t = Path(tempfile.mkdtemp())
     tree, bin_ = t / "tree", t / "bin"
     (tree / "optimize" / "lists").mkdir(parents=True); bin_.mkdir()
@@ -93,7 +95,7 @@ def run(name, fail_switches, first_drop, down_polls=0, verify="", verifier=None,
         (bin_ / f).write_text(body); (bin_ / f).chmod(0o755)
     if verifier is not None:
         (t / "verifier").write_text(verifier + "\n")
-    env = dict(os.environ, INSTALL_MODE=install_mode, WRAITH_HOME=wraith_home, WIFI=wifi, ILLEGAL=illegal, VERIFY=verify, VANISH=vanish, CURL_MODE=curl_mode, PATH=f"{bin_}:{os.environ['PATH']}", PY=str(bin_ / "py"), T=str(t),
+    env = dict(os.environ, INSTALL_MODE=install_mode, NOHOME=nohome, WRAITH_HOME=wraith_home, WIFI=wifi, ILLEGAL=illegal, VERIFY=verify, VANISH=vanish, CURL_MODE=curl_mode, PATH=f"{bin_}:{os.environ['PATH']}", PY=str(bin_ / "py"), T=str(t),
                FAIL_SWITCHES=str(fail_switches), FIRST_DROP=first_drop, DOWN_POLLS=str(down_polls))
     r = subprocess.run(["bash", str(tree / "optimize" / "install.sh"), "launcher"], env=env, capture_output=True, text=True)
     log = (t / "log").read_text().split() if (t / "log").exists() else []
@@ -132,7 +134,7 @@ cases = [
      lambda c, o, l: c == 0 and "vending" not in l and l.count("installed") == 1 and "Play Store" not in o),
     ("the TV refuses to turn its own home off («This command is illegal»): the switch is skipped and said", run("n", 0, "", illegal="stock"),
      lambda c, o, l: c == 0 and "Home switch skipped" in o and "Nokia" in o and "Launcher is home" not in o and l.count("illegal") == 1
-     and "other-batch" in l and "!!" not in o),
+     and "restore-stock" in l and "!!" not in o),
     ("Play Protect refuses: the Arabic words for the person, «تثبيت على أي حال»", run("o", 0, "", verify="once", verifier="1"),
      lambda c, o, l: c == 0 and "تثبيت على أي حال" in o),
     ("Play Protect refuses twice: tells the person what to press and not to switch the verifier off", run("p", 0, "", verify="always", verifier="1"),
@@ -143,6 +145,9 @@ cases = [
      lambda c, o, l: c == 0 and l.count("wraith-off") == 1 and "Launcher is home" in o),
     ("the wizard answers Home and owns the Wi-Fi: it stays on and the switch goes on without it", run("s", 0, "", wraith_home="yes", wifi="owned"),
      lambda c, o, l: c == 0 and "wraith-off" not in l and "Launcher is home" in o and "left on" in o and "!!" not in o),
+    ("Home never opens ours (the wizard owns the Wi-Fi and keeps Home): the stock home is put back at once, not in 5 minutes",
+     run("u", 0, "", wraith_home="yes", wifi="owned", nohome="yes"),
+     lambda c, o, l: c == 1 and "wraith-off" not in l and "restore-stock" in l and "stock home was put back" in o),
     ("the wizard answers Home but the TV does not say who owns the Wi-Fi: the wizard stays on", run("t", 0, "", wraith_home="yes", wifi=""),
      lambda c, o, l: c == 0 and "wraith-off" not in l),
     ("an app of the same name with another signature: never uninstalled, stops and says what is lost", run("u", 0, "", install_mode="incompatible"),
