@@ -10,6 +10,15 @@ import sys
 
 from PIL import Image, ImageCms, ImageOps
 
+try:   # iPhone / Samsung HEIC and HEIF: only if pillow-heif is installed (optimize/setup.sh tries; it is optional)
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    HEIC = True
+except Exception:  # noqa: BLE001  (not installed, or no wheel for this computer)
+    HEIC = False
+
+FORMATS = "JPEG, PNG, WebP, GIF, BMP" + (", HEIC/HEIF" if HEIC else "")
+
 MAX_WIDTH = 1920
 MAX_PIXELS = 4_200_000   # the TV decodes it at full size: a tall photo is kept below this, not just below the screen width
 QUALITY = 85
@@ -53,7 +62,12 @@ def prepare(src, dst, screen=(MAX_WIDTH, 1080)):
             im.draft("RGB", (side, side))   # the decoder skips most of a big file's pixels
         im.load()
     except Exception as e:  # noqa: BLE001
-        raise ValueError(f"{src}: not a photo I can read ({type(e).__name__}); use JPEG, PNG, WebP, GIF or BMP") from e
+        raw = src.lower().endswith((".dng", ".cr2", ".cr3", ".nef", ".arw", ".raf", ".orf", ".rw2"))
+        heic = src.lower().endswith((".heic", ".heif")) and not HEIC
+        why = ("a RAW file (DNG and the like) is not supported: export it as JPEG first" if raw else
+               "HEIC is not supported on this computer (pillow-heif is not installed): export it as JPEG first, or run optimize/setup.sh again" if heic else
+               f"supported: {FORMATS}")
+        raise ValueError(f"{src}: not a photo I can read ({type(e).__name__}); {why}") from e
     im = ImageOps.exif_transpose(im)   # also drops the orientation tag
     im = to_srgb(im)
     if im.mode in ("RGBA", "LA", "P"):

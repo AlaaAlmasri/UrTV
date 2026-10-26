@@ -4,7 +4,8 @@
 #                                - Play Store kept from running in the background (it stays installed and opens
 #                                  normally; on one set its idle CPU fell 31% -> 6%)
 #                                - closed apps frozen while cached (no CPU in the background)
-#                                - app caches trimmed
+#                                - app caches trimmed, only when the free storage is low (under 1 GB or 10%): the
+#                                  caches (thumbnails, app data to load) are useful while there is room
 #   optimize/tweaks.sh restore   back to Android's defaults
 # Not by default until it is measured again: CACHED_LIMIT=16 optimize/tweaks.sh apply also keeps at most 16 closed
 # apps in memory (only lowered, never raised). It shows more free RAM, but Android 14 raised this limit on purpose
@@ -41,7 +42,20 @@ if [ "$1" = apply ]; then
   else
     cmds+=("device_config delete activity_manager max_cached_processes")   # Android's own limit (undoes an older run)
   fi
-  cmds+=("settings put global cached_apps_freezer enabled" "pm trim-caches 999G")
+  cmds+=("settings put global cached_apps_freezer enabled")
+  # trimming throws away every app's cache (thumbnails, things apps would load again): only worth it when storage is short
+  space=$("$PY" -I optimize/tv.py "df -k /data 2> /dev/null | tail -n 1" | tr -d '\r' | awk '{print $2, $4}') || space=""
+  read -r total avail <<< "$space" || true
+  if [[ "${total:-}" =~ ^[0-9]+$ && "${avail:-}" =~ ^[0-9]+$ && "$total" -gt 0 ]]; then
+    if [ "$avail" -lt 1048576 ] || [ $((avail * 10)) -lt "$total" ]; then
+      cmds+=("pm trim-caches 999G")
+      echo "Free storage is low ($((avail / 1024)) MB of $((total / 1024)) MB): app caches trimmed."
+    else
+      echo "Free storage is fine ($((avail / 1024)) MB of $((total / 1024)) MB): app caches left alone."
+    fi
+  else
+    echo "Free storage unknown: app caches left alone."
+  fi
 else
   cmds+=("device_config delete activity_manager max_cached_processes"
          "settings put global cached_apps_freezer device_default")

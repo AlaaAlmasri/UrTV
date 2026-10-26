@@ -17,11 +17,23 @@ def job_step(name):
         j["left"] -= 1; stats["polls"] += 1
         return "running %d" % (len(FS.get(j["dst"], b"")) * 100 // 700_000)
     if j:
-        FS[j["dst"]] = base64.b64decode(FS[j["src"]]); FS[J + name + ".rc"] = "0"; del JOB[name]
+        if "md5" in j:
+            v = FS[j["md5"]]
+            FS[J + name + ".out"] = hashlib.md5(v if isinstance(v, bytes) else v.encode()).hexdigest() + "  " + j["md5"]
+        else:
+            FS[j["dst"]] = base64.b64decode(FS[j["src"]])
+        FS[J + name + ".rc"] = "0"; del JOB[name]
     return "done" if J + name + ".rc" in FS else "dead"
 
 def run(cmd):
     if "nohup sh -c" in cmd:   # start a background job, or join the one still running
+        m = re.search(r"\(md5sum (\S+)\) > " + re.escape(J) + r"(\w+)\.out", cmd)
+        if m:   # the checksum of the uploaded file, as a job
+            name = m.group(2)
+            if name in JOB: return "joined"
+            for f in (".rc", ".out"): FS.pop(J + name + f, None)
+            JOB[name] = {"md5": m.group(1), "left": random.randint(0, 3)}
+            return "started"
         m = re.search(r"\(base64 -d (\S+) > (\S+)\) > " + re.escape(J) + r"(\w+)\.out", cmd)
         src, dst, name = m.groups()
         if name in JOB: return "joined"
@@ -33,7 +45,7 @@ def run(cmd):
     m = re.fullmatch(r"cat " + re.escape(J) + r"(\w+)\.rc", cmd)
     if m: return FS[J + m.group(1) + ".rc"]
     m = re.fullmatch(r"cat " + re.escape(J) + r"(\w+)\.out", cmd)
-    if m: return ""
+    if m: return FS.get(J + m.group(1) + ".out", "")
     m = re.match(r"if \[ -f (\S+) \]; then head -c (\d+) \S+ > \S+ && \[ -f \S+ \] && mv \S+ \S+; fi; (.*)", cmd)
     if m:   # cut_back for i > 0: only a file that is there is cut
         if m.group(1) in FS: FS[m.group(1)] = FS[m.group(1)][:int(m.group(2))]
@@ -146,7 +158,11 @@ cut_check("tries: 6 for a command, more for an upload", tv.LONG_TRIES >= tv.TRIE
 # run_bg: a long command is started once, polled with short calls, its output and exit code come back;
 # a job that never ends is given up on after the limit; a job that died without an answer is run directly.
 class Fake:
-    def __init__(self, polls, dead=False): self.polls, self.dead, self.calls = polls, dead, []   # dead: True at once, "later" after a while
+    def __init__(self, polls, dead=False, mute=0): self.polls, self.dead, self.calls, self.mute = polls, dead, [], mute   # dead: True at once, "later" after a while; mute: looks that get no answer
+    def soft(self, cmd, timeout=30, tries=2):
+        if "if grep -q" in cmd and self.mute > 0:   # the TV is busy installing and ADB does not answer (None, as TV.soft gives)
+            self.mute -= 1; self.calls.append(cmd); return None
+        return self.shell(cmd, timeout)
     def shell(self, cmd, timeout=120):
         self.calls.append(cmd)
         if "nohup sh -c" in cmd: return "started"
@@ -172,12 +188,22 @@ with contextlib.redirect_stderr(io.StringIO()):
     got = tv.run_bg(f, "install", "pm install -r /data/local/tmp/x.apk")
 if got != (0, "Success"): bgbad.append(f"no background jobs: {got}")
 if sum(c.endswith("echo __rc=$?") for c in f.calls) != 1: bgbad.append("no background jobs: not run directly once")
+if not any("echo -n ." in c for c in f.calls): bgbad.append("run directly: no output while it runs (a 60 s silence fails)")
 # the same TV, but the job lives a few seconds first (a TCL on Android 14): still run directly, once
 f = Fake(10**9, dead="later")
 with contextlib.redirect_stderr(io.StringIO()):
     got = tv.run_bg(f, "install", "pm install -r /data/local/tmp/x.apk")
 if got != (0, "Success"): bgbad.append(f"dies after a while: {got}")
 if sum(c.endswith("echo __rc=$?") for c in f.calls) != 1: bgbad.append("dies after a while: not run directly once")
+# F-field: ADB silent for several looks in a row while pm install optimises dex: the wait goes on, no exit
+f = Fake(3, mute=5)
+err = io.StringIO()
+try:
+    with contextlib.redirect_stderr(err): got = tv.run_bg(f, "install", "pm install -r /data/local/tmp/x.apk")
+    if got != (1, "Failure [INSTALL_FAILED_X]"): bgbad.append(f"silent TV: {got}")
+    if "not answering yet" not in err.getvalue(): bgbad.append("silent TV: not said")
+except SystemExit as e:
+    bgbad.append(f"silent TV ended the run: {e}")
 for name, fake, limit, word in (("never ends", Fake(10**9), 30, "still running after"),):
     err = io.StringIO()
     try:
@@ -185,6 +211,15 @@ for name, fake, limit, word in (("never ends", Fake(10**9), 30, "still running a
         bgbad.append(name + ": no exit")
     except SystemExit as e:
         if word not in str(e): bgbad.append(f"{name}: said {e}")
+# TV.soft against a real TV object: a connection that keeps timing out gives None and does not exit
+class Mute(Dev):
+    def shell(self, cmd, read_timeout_s=0): raise TimeoutError("Reading from x timed out (60.0 seconds)")
+tv.AdbDeviceTcp = Mute
+t = tv.TV()
+with contextlib.redirect_stderr(io.StringIO()):
+    r = t.soft("true")
+if r is not None: bgbad.append(f"TV.soft on a silent TV gave {r!r}")
+tv.AdbDeviceTcp = Dev
 print("run_bg: " + ("ok" if not bgbad else f"WRONG {bgbad}"))
 
 # Git Bash on Windows rewrites /data/local/tmp/x into its own folder before Python sees it: tv.py cuts it back off

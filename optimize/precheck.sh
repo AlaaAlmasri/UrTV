@@ -16,6 +16,6 @@ answers=$(printf '%s\n' \
   "pm list features" \
   "getprop ro.product.manufacturer" \
   "dumpsys webviewupdate" \
-  'for p in $(pm list packages webview); do echo "${p#package:} $(dumpsys package ${p#package:} | grep -m1 versionName)"; done' \
+  'for p in $(pm list packages webview); do echo "${p#package:} $(dumpsys package ${p#package:} | grep versionName | sed -n 1p)"; done' \
   | "$PY" -I optimize/tv.py --batch)
 exec "$PY" -I optimize/precheck.py "${1:-check}" <<< "$answers"

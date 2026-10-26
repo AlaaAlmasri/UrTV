@@ -25,7 +25,7 @@ fi
 keptpkgs=$("$PY" -I optimize/offlist.py kept 2> /dev/null || true)
 if [ -n "$keptpkgs" ]; then
   skipped=$(printf '%s\n' "$pkgs" | grep -Fxf <(printf '%s\n' "$keptpkgs") || true)
-  [ -z "$skipped" ] || echo "Left on, as the person asked: $(paste -sd' ' <<< "$skipped")" >&2
+  [ -z "$skipped" ] || echo "Left on, as the person asked: $(paste -sd' ' - <<< "$skipped")" >&2
   pkgs=$(printf '%s\n' "$pkgs" | grep -Fxvf <(printf '%s\n' "$keptpkgs") || true)
 fi
 [ -n "$pkgs" ] || exit 0

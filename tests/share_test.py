@@ -110,7 +110,16 @@ code, out, err = cli("--send")
 problem_sent = code == 0 and sent == [written]
 share.live_props = lambda: {"ro.product.manufacturer": "TCL", "ro.product.model": "Live TV"}
 live_tv = "TCL Live TV" in share.tv()
-ok = no_file and preview and sends and refuses and plain and needs_setup and problem and problem_sent and live_tv
+# steps.log spanning a re-run, out of order (the clock or date moved back): no negative gap, no negative time
+(share.RUN / "steps.log").write_text("\n".join([
+    "2026-10-20 10:00:00 start probe", "2026-10-20 10:00:30 done probe",
+    "2026-10-20 10:01:00 start extras", "2026-10-20 10:05:00 stopped extras exit 1",
+    "2026-10-20 09:40:00 start extras", "2026-10-20 09:41:00 done extras",   # the clock jumped back
+]) + "\n", encoding="utf-8")
+step_text = " ".join(share.steps())
+steps_ok = "-" not in step_text.replace("-", "", 0).replace("min in all", "") and "until it was run again" not in step_text and "probe 0:30" in step_text
+print("share: steps never print a negative time" if steps_ok else f"WRONG steps {step_text}")
+ok = steps_ok and no_file and preview and sends and refuses and plain and needs_setup and problem and problem_sent and live_tv
 print("share: " + ("--preview sends nothing, --send sends the file written, plain form still sends, --problem works without setup results"
                     if ok else f"WRONG preview/send {no_file} {preview} {sends} {refuses} {plain} {needs_setup} {problem} {problem_sent} {live_tv}"))
 sys.exit(1 if leaks or not counts or not alarm or not ok or bad_win or not versions_ok else 0)

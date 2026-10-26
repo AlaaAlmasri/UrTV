@@ -46,7 +46,7 @@ if [ -s "$tmp/todo" ]; then   # never what UAD-ng rates Unsafe; offline, the che
   if rated=$("$PY" -I optimize/check-packages.py "$tmp/todo" 2> /dev/null); then
     unsafe=$(awk '$1 == "Unsafe" {print $2}' <<< "$rated")
     if [ -n "$unsafe" ]; then
-      echo "   left on, rated Unsafe: $(paste -sd' ' <<< "$unsafe")"
+      echo "   left on, rated Unsafe: $(paste -sd' ' - <<< "$unsafe")"
       grep -vxFf <(printf '%s\n' "$unsafe") "$tmp/todo" > "$tmp/todo2" || true; mv "$tmp/todo2" "$tmp/todo"
     fi
   else echo "   (the Unsafe check needs the internet and could not run: only the filters above were applied)"; fi
