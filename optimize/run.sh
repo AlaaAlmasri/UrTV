@@ -128,7 +128,7 @@ report() {
   optimize/autostart.sh check 2> /dev/null || true   # TCL: «Auto-start (TCL): …» or a !! line
   [ ! -f "$RUN/home-skipped.txt" ] || cat "$RUN/home-skipped.txt"   # a TV that won't let its home be switched (Nokia Streaming Box 8000)
   echo "Screensaver: $(tv "settings get secure screensaver_components")"
-  echo "Versions: screensaver $(tv "dumpsys package sa.urtv.screensaver 2> /dev/null | grep -m1 versionName" | sed 's/.*=//'), home $(tv "dumpsys package sa.urtv.home 2> /dev/null | grep -m1 versionName" | sed 's/.*=//')"
+  echo "Versions: screensaver $(tv "dumpsys package sa.urtv.screensaver 2> /dev/null | grep versionName | sed -n 1p" | sed 's/.*=//'), home $(tv "dumpsys package sa.urtv.home 2> /dev/null | grep versionName | sed -n 1p" | sed 's/.*=//')"
   echo "Extras: TV Bro $([ -n "$(tv "pm list packages com.phlox.tvwebbrowser")" ] && echo yes || echo no), SmartTube $([ -n "$(tv "pm list packages org.smarttube.stable")" ] && echo yes || echo no)"
   local picks
   picks=$(grep -cvE '^\s*(#|$)' optimize/lists/mine.txt 2>/dev/null || true)

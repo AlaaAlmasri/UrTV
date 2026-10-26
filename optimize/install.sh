@@ -333,8 +333,8 @@ fi
 # and share.sh agree. (Only when the report exists; no report, nothing to correct.)
 if [ "$what" != extras ] && [ -f "${URTV_RUN_DIR:-optimize/run}/report.md" ]; then
   rep="${URTV_RUN_DIR:-optimize/run}/report.md"
-  vs=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.screensaver 2> /dev/null | grep -m1 versionName" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vs=""
-  vh=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.home 2> /dev/null | grep -m1 versionName" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vh=""
+  vs=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.screensaver 2> /dev/null | grep versionName | sed -n 1p" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vs=""
+  vh=$("$PY" -I optimize/tv.py "dumpsys package sa.urtv.home 2> /dev/null | grep versionName | sed -n 1p" 2> /dev/null | sed 's/.*=//' | tr -d '\r ') || vh=""
   if [ -n "$vs$vh" ]; then
     line="Versions: screensaver ${vs:-none}, home ${vh:-none}"
     if grep -q '^Versions:' "$rep"; then

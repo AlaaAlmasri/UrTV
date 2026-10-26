@@ -153,7 +153,8 @@ READ_ONLY = ("getprop", "dumpsys", "pm list", "pm path", "pm query-services", "p
              "cmd package list", "device_config get", "appops get", "cmd package query-activities")
 # Commands that read in one form and write in another («wm size 1280x720», «wm density 240», «date -s …» change the TV): only
 # the reading form counts, whatever follows.
-READ_FORMS = (re.compile(r"wm (size|density)\s*$"), re.compile(r"date(\s+-u)?(\s+\+\S*)?\s*$"))
+READ_FORMS = (re.compile(r"wm (size|density)\s*$"), re.compile(r"date(\s+-u)?(\s+\+\S*)?\s*$"),
+              re.compile(r"sed -n\s+\d+p\s*$"))   # «sed -n 1p»: the first line of what came before
 SHELL_WORDS = ("for", "do", "done", "if", "then", "else", "elif", "fi", "while", "{", "}", "!")
 
 
