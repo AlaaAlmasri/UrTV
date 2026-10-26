@@ -53,6 +53,7 @@ python3 tests/page_stamp_test.py
 python3 tests/greeting_test.py
 python3 tests/card_box_test.py
 python3 tests/glow_look_test.py
+python3 tests/unsplash_header_test.py
 python3 tests/adhan_bar_test.py
 python3 tests/clock_zone_test.py
 python3 tests/countdown_text_test.py
