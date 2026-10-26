@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- the build: UTC time (YYYYMMDDHHMMSS) of the newest commit of the page's sources, put in by src/build.py. The app loads the page with the newer stamp (its own
      copy or a downloaded one), never by file time, and does not keep a download whose stamp is older than its own (Updater, PageStamp). -->
-<meta name="urtv-build" content="20261023193544">
+<meta name="urtv-build" content="20261026032822">
 <title>شاشة تلفزيونك</title>
 <style>
   @font-face{font-family:'Thmanyah';font-weight:300;font-style:normal;font-display:block;src:url("https://raw.githubusercontent.com/tshi-dev/UrTV/master/assets/fonts/Thmanyah-Light.woff2") format("woff2")}
@@ -603,7 +603,7 @@ const CONFIG = {
   latitude: _num('lat', 24.7136),
   longitude: _num('lon', 46.6753),
   timezone: _tzOk(_Q.get('tz') || 'Asia/Riyadh') ? (_Q.get('tz') || 'Asia/Riyadh') : 'Asia/Riyadh',
-  prayerMethod: 4,
+  prayerMethod: 4,   // set below
   // followed teams in priority order: #teams=id,id,... (up to 20); older builds send team1/team2
   teamIds: (_Q.has('teams') ? _Q.get('teams').split(',')
             : [_Q.has('team1') ? _Q.get('team1') : '136013', _Q.has('team2') ? _Q.get('team2') : '136137'])
@@ -679,6 +679,10 @@ const CONFIG = {
 };
 // The cards on this page: the screensaver's one (#panel=); the launcher's up to three (#home_panel=a,b,c, none or empty = no card;
 // an older launcher sends the one card as #panel=). Each kind once, in order.
+// the prayer calculation (Aladhan's id): #pm=jafari everywhere, else the country's by the zone, else Umm al-Qura 4; PrayerMath.methodFor
+// (launcher) and PrayerMethod (app) say the same, tests/prayer_method_test.py compares them
+CONFIG.prayerMethod = _Q.get('pm') === 'jafari' ? 0
+  : ({'Asia/Kuwait':9, 'Asia/Qatar':10, 'Asia/Dubai':16, 'Asia/Bahrain':8, 'Asia/Muscat':8})[CONFIG.timezone] || 4;
 CONFIG.cards = (CONFIG.widget && _Q.has('home_panel') ? _list('home_panel') : [CONFIG.panel])
   .filter((k, i, a) => CARD_KINDS.includes(k) && a.indexOf(k) === i).slice(0, 3);
 CONFIG.panel = CONFIG.cards[0] || 'none';   // the first one, for what only needs to know "the card"
@@ -806,18 +810,49 @@ function adjustedTimes(t){
   });
   return out;
 }
+// «5:12» and «05:12 (+03)» are 05:12; anything else is null
+function clockText(v){
+  const m = /^\s*(\d{1,2}):(\d{2})/.exec(v == null ? '' : String(v));
+  if(!m) return null;
+  const h = +m[1], mi = +m[2];
+  return h < 24 && mi < 60 ? pad(h) + ':' + pad(mi) : null;
+}
+// An Aladhan answer for that day (DD-MM-YYYY) whole, or null: five valid times and the day asked. An Isha before Maghrib is after midnight: «24:10»
+function checkedTimings(j, want){
+  const t = j && j.data && j.data.timings, got = j && j.data && j.data.date && j.data.date.gregorian && j.data.date.gregorian.date;
+  if(!t || (got && got !== want)) return null;
+  const out = {};
+  for(const k of PRAYER_KEYS){ if(!(out[k] = clockText(t[k]))) return null; }
+  out.Sunrise = clockText(t.Sunrise) || undefined;
+  const mins = k => { const [h, mi] = out[k].split(':').map(Number); return h * 60 + mi; };
+  if(mins('Isha') < mins('Maghrib')) out.Isha = pad(Math.floor((mins('Isha') + 1440) / 60)) + ':' + pad(mins('Isha') % 60);
+  return out;
+}
 function buildPrayers(t){
-  DAY_TIMES = t = adjustedTimes(t);
-  PRAYERS = PRAYER_KEYS.map(k=>{
-    const [h,mi] = String(t[k]).split(':').map(Number);
-    return {key:k, name:PRAYER_NAMES[k], h, mi};
+  t = adjustedTimes(t);
+  // all fields are checked before anything is published; a bad one throws
+  const list = PRAYER_KEYS.map(k => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t[k]));
+    if(!m || +m[2] > 59) throw new Error('prayer time ' + k);
+    return {key:k, name:PRAYER_NAMES[k], h:+m[1], mi:+m[2]};
   });
+  DAY_TIMES = t;
+  PRAYERS = list;
 }
 
-// Umm al-Qura: Fajr at 18.5°, Maghrib at sunset, Isha 90 min after Maghrib (120 in Ramadan),
-// Asr at shadow factor 1. Same method as Aladhan's method 4, so the offline times match to a minute or two.
+// By Aladhan's id, as PrayerMath.METHODS in the launcher: Fajr/Isha angles, or Isha minutes after Maghrib (+30 in Ramadan for 4 alone), the
+// Maghrib angle, minutes added to sunrise/Dhuhr/Asr/Maghrib. Sources: aladhan.com/calculation-methods, Batoul Apps adhan (Dubai margins)
+const PRAYER_METHODS = {
+  0:  {fajr:16,   isha:14,   ishaMin:0,  maghrib:4,    tune:[0,0,0,0]},      // Ja'fari (Leva, Qum)
+  4:  {fajr:18.5, isha:0,    ishaMin:90, maghrib:.833, tune:[0,0,0,0]},      // Umm al-Qura
+  8:  {fajr:19.5, isha:0,    ishaMin:90, maghrib:.833, tune:[0,0,0,0]},      // Gulf (Bahrain, Oman)
+  9:  {fajr:18,   isha:17.5, ishaMin:0,  maghrib:.833, tune:[0,0,0,0]},      // Kuwait
+  10: {fajr:18,   isha:0,    ishaMin:90, maghrib:.833, tune:[0,0,0,0]},      // Qatar
+  16: {fajr:18.2, isha:18.2, ishaMin:0,  maghrib:.833, tune:[-3,3,3,3]},     // Dubai (the UAE)
+};
 function computePrayers(){
   const p = riyadhParts(), lat = CONFIG.latitude, lng = CONFIG.longitude;
+  const M = PRAYER_METHODS[CONFIG.prayerMethod] || PRAYER_METHODS[4];
   const tz = Math.round((Date.UTC(p.y,p.mo-1,p.d,p.h,p.mi,p.s) - Date.now()) / 60000) / 60;
   const rad = d => d*Math.PI/180, deg = r => r*180/Math.PI;
   const fix = (a,b) => { a = a - b*Math.floor(a/b); return a < 0 ? a + b : a; };
@@ -833,8 +868,8 @@ function computePrayers(){
   const noon = t => fix(12 - sun(t/24).eqt, 24);
   const angleTime = (angle, t, ccw) => {
     const d = sun(t/24).decl, n = noon(t);
-    const T = deg(Math.acos((-Math.sin(rad(angle)) - Math.sin(rad(d))*Math.sin(rad(lat))) /
-                            (Math.cos(rad(d))*Math.cos(rad(lat)))))/15;
+    const c = (-Math.sin(rad(angle)) - Math.sin(rad(d))*Math.sin(rad(lat))) / (Math.cos(rad(d))*Math.cos(rad(lat)));
+    const T = deg(Math.acos(Math.max(-1, Math.min(1, c))))/15;
     return n + (ccw ? -T : T);
   };
   const asrTime = t => {
@@ -843,29 +878,36 @@ function computePrayers(){
     return angleTime(a, t, false);
   };
   const adj = h => h + tz - lng/15;
-  const fajr = adj(angleTime(18.5, 5, true)), dhuhr = adj(noon(12)), asr = adj(asrTime(13));
+  const fajr = adj(angleTime(M.fajr, 5, true)), dhuhr = adj(noon(12)), asr = adj(asrTime(13));
   const sunrise = adj(angleTime(.833, 6, true));
-  const maghrib = adj(angleTime(.833, 18, false));
-  const isha = maghrib + (hijriMonthNow() === 9 ? 120 : 90)/60;
+  const maghrib = adj(angleTime(M.maghrib, 18, false));
   const hm = h => { const m = Math.round(fix(h, 24)*60) % 1440; return pad(Math.floor(m/60)) + ':' + pad(m%60); };
-  // Isha is Maghrib plus its delay and stays an absolute time: past midnight (a late Maghrib at a high latitude) it reads «24:30», not an
-  // hour that has already gone today (the rest of the page counts minutes from midnight, so 1470 is after 1439)
-  const abs = h => { const m = Math.round(h*60); return pad(Math.floor(m/60)) + ':' + pad(m%60); };
-  return {Fajr:hm(fajr), Sunrise:hm(sunrise), Dhuhr:hm(dhuhr), Asr:hm(asr), Maghrib:hm(maghrib), Isha:abs(isha)};
+  // Isha stays absolute: past midnight it reads «24:30»
+  const abs = m => pad(Math.floor(m/60)) + ':' + pad(m%60);
+  const [tSun, tDhr, tAsr, tMag] = M.tune;
+  const magM = Math.round(maghrib*60) + tMag;
+  const ishaM = M.ishaMin ? magM + M.ishaMin + (CONFIG.prayerMethod === 4 && hijriMonthNow() === 9 ? 30 : 0)
+                          : Math.max(magM, Math.round(adj(angleTime(M.isha, 18, false))*60));
+  const at = (h, d) => hm(h + d/60);
+  return {Fajr:hm(fajr), Sunrise:at(sunrise, tSun), Dhuhr:at(dhuhr, tDhr), Asr:at(asr, tAsr), Maghrib:at(maghrib, tMag), Isha:abs(ishaM)};
 }
 
+let PRAYERS_DAY = '';   // DD-MM-YYYY|api or |calc: the day and source of the times
 async function loadPrayers(){
-  const p = riyadhParts();
-  const url = `https://api.aladhan.com/v1/timings/${pad(p.d)}-${pad(p.mo)}-${p.y}`
+  const p = riyadhParts(), want = `${pad(p.d)}-${pad(p.mo)}-${p.y}`;
+  const url = `https://api.aladhan.com/v1/timings/${want}`
             + `?latitude=${CONFIG.latitude}&longitude=${CONFIG.longitude}`
             + `&method=${CONFIG.prayerMethod}&timezonestring=${encodeURIComponent(CONFIG.timezone)}`;
   try{
     const r = await fetchT(url, 12000);
-    const j = await r.json();
-    if(!j?.data?.timings?.Fajr) throw 0;
-    buildPrayers(j.data.timings);
+    const t = checkedTimings(await r.json(), want);
+    if(!t) throw 0;
+    buildPrayers(t);
+    PRAYERS_DAY = want + '|api';
   }catch(e){
-    try{ buildPrayers(computePrayers()); }catch(_){}
+    if(!PRAYERS.length || PRAYERS_DAY.slice(0, 10) !== want){   // today's times already here are kept
+      try{ buildPrayers(computePrayers()); PRAYERS_DAY = want + '|calc'; }catch(_){}
+    }
   }
   tickPrayer();
   tickOccasion();   // Ramadan mode needs the prayer times
@@ -902,8 +944,8 @@ function isFriday(){
 }
 function prayerName(x){ return x.key === 'Dhuhr' && isFriday() ? 'الجمعة' : x.name; }
 
-// ---- the bar before the adhan: in the last 10 minutes before each prayer «الأذان بعد ٨ دقائق», from the adhan to the iqama
-// «الإقامة بعد ١٢ دقيقة» (the iqama minutes of CONFIG.iqama, none for a Friday's Dhuhr). #adhanbar=0 turns it off.
+// ---- the bar before the adhan: the last 10 minutes «أذان المغرب بعد ٨ دقائق», then to the iqama «إقامة المغرب بعد ١٢ دقيقة» (CONFIG.iqama;
+// none for a Friday's Dhuhr, «أذان الجمعة»). #adhanbar=0 turns it off.
 const ADHAN_BAR_MIN = 10;
 // «٤ دقائق»: what is left to an adhan, in the same words at the same second on the bar and in the panel below (whole minutes of the
 // rounded second; never less than one)
@@ -913,9 +955,9 @@ function adhanBarText(){
   const p = riyadhParts(), mins = p.h*60 + p.mi + p.s/60;
   for(const x of PRAYERS){
     const at = x.h*60 + x.mi, toAdhan = at - mins;
-    if(toAdhan > 0 && toAdhan <= ADHAN_BAR_MIN) return 'الأذان بعد ' + untilAdhan(toAdhan);
+    if(toAdhan > 0 && toAdhan <= ADHAN_BAR_MIN) return 'أذان ' + prayerName(x) + ' بعد ' + untilAdhan(toAdhan);
     const gap = x.key === 'Dhuhr' && isFriday() ? 0 : (CONFIG.iqama[x.key] || 0);
-    if(mins >= at && mins < at + gap) return 'الإقامة بعد ' + humanRemaining(Math.max(60, Math.ceil(at + gap - mins)*60));
+    if(mins >= at && mins < at + gap) return 'إقامة ' + prayerName(x) + ' بعد ' + humanRemaining(Math.max(60, Math.ceil(at + gap - mins)*60));
   }
   return '';
 }
