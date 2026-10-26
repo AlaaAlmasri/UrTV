@@ -38,6 +38,8 @@ public class TasksActivity extends Activity {
 
     private final List<String> texts = new ArrayList<>();
     private final List<Boolean> dones = new ArrayList<>();
+    /** each task's own id, which stays with it when the list moves or two tasks say the same (0: an older screensaver app that gives none) */
+    private final List<Long> ids = new ArrayList<>();
     private LinearLayout list, confirm;
     private TextView status, question;
     private View mic, yes, no;
@@ -115,11 +117,13 @@ public class TasksActivity extends Activity {
     private boolean load() {
         texts.clear();
         dones.clear();
+        ids.clear();
         try (Cursor c = getContentResolver().query(TASKS, null, null, null, null)) {
             if (c == null) return false;
             while (c.moveToNext()) {
                 texts.add(c.getString(1));
                 dones.add(c.getInt(2) != 0);
+                ids.add(c.getColumnCount() > 4 ? c.getLong(4) : 0L);
             }
             return true;
         } catch (RuntimeException e) {
@@ -136,12 +140,13 @@ public class TasksActivity extends Activity {
         for (int i = 0; i < texts.size(); i++) {
             final String t = texts.get(i);
             final boolean done = dones.get(i);
+            final long id = ids.get(i);
             LinearLayout r = new LinearLayout(this);
-            View del = pill("حذف", 0xFFEE8B70, v -> ask("أحذف «" + t + "»؟", () -> delete(t)));
+            View del = pill("حذف", 0xFFEE8B70, v -> ask("أحذف «" + t + "»؟", () -> delete(t, id)));
             r.addView(del, new LinearLayout.LayoutParams(dp(84), -1));
             View card = card((done ? "✓  " : "●  ") + t, done, v -> {
                 if (done) toast("هذي المهمة منجزة");
-                else markDone(t);
+                else markDone(t, id);
             });
             LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1f);
             cp.leftMargin = dp(10);
@@ -160,18 +165,22 @@ public class TasksActivity extends Activity {
 
     // ---------------------------------------------------------------- changes (the list itself lives in the screensaver app)
 
-    private void markDone(String t) {
-        int n = numberOf(t, true);
+    /** id is the task the person pointed at (0 when it is not known: found again by its text, the first open one) */
+    private void markDone(String t, long id) {
         ContentValues v = new ContentValues();
-        v.put("i", n);
-        if (n > 0 && write(() -> getContentResolver().update(TASKS, v, null, null) > 0)) toast("تم: " + t);
+        long which = id > 0 ? id : idOf(t, true);
+        int n = which > 0 ? 0 : numberOf(t, true);
+        if (which > 0) v.put("id", which); else v.put("i", n);
+        if ((which > 0 || n > 0) && write(() -> getContentResolver().update(TASKS, v, null, null) > 0)) toast("تم: " + t);
         else failed();
     }
 
-    private void delete(String t) {
-        int n = numberOf(t, false);
-        if (n > 0 && write(() -> getContentResolver().delete(TASKS.buildUpon().appendPath(String.valueOf(n)).build(), null, null) > 0))
-            toast("حُذفت: " + t);
+    private void delete(String t, long id) {
+        long which = id > 0 ? id : idOf(t, false);
+        int n = which > 0 ? 0 : numberOf(t, false);
+        Uri uri = which > 0 ? TASKS.buildUpon().appendPath("id").appendPath(String.valueOf(which)).build()
+                : TASKS.buildUpon().appendPath(String.valueOf(n)).build();
+        if ((which > 0 || n > 0) && write(() -> getContentResolver().delete(uri, null, null) > 0)) toast("حُذفت: " + t);
         else failed();
     }
 
@@ -199,7 +208,15 @@ public class TasksActivity extends Activity {
         render(0);
     }
 
-    /** the number the screensaver gives it now (from 1), found again by its text: the list may have moved */
+    /** the id of the first task with this text (an open one when openOnly); 0 when there is none, or the app gives no ids */
+    private long idOf(String t, boolean openOnly) {
+        if (!load()) return 0;
+        for (int i = 0; i < texts.size(); i++)
+            if (texts.get(i).equals(t) && !(openOnly && dones.get(i))) return ids.get(i);
+        return 0;
+    }
+
+    /** the number the screensaver gives it now (from 1), found again by its text: for an older screensaver app that has no ids */
     private int numberOf(String t, boolean openOnly) {
         if (!load()) return 0;
         for (int i = 0; i < texts.size(); i++)
@@ -275,12 +292,12 @@ public class TasksActivity extends Activity {
             }
             case DONE: {
                 final String t = r.text;
-                ask("أعلّم «" + t + "» منجزة؟", () -> markDone(t));
+                ask("أعلّم «" + t + "» منجزة؟", () -> markDone(t, 0));
                 break;
             }
             case DELETE: {
                 final String t = r.text;
-                ask("أحذف «" + t + "»؟", () -> delete(t));
+                ask("أحذف «" + t + "»؟", () -> delete(t, 0));
                 break;
             }
             case NO_MATCH:

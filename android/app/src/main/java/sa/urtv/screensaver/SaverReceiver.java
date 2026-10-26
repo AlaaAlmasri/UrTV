@@ -370,7 +370,7 @@ public class SaverReceiver extends BroadcastReceiver {
     }
 
     private static String listing(Prefs p) {
-        List<Prefs.Task> all = p.tasks();
+        List<Task> all = p.tasks();
         if (all.isEmpty()) return "no tasks";
         StringBuilder b = new StringBuilder();
         for (int k = 0; k < all.size(); k++)

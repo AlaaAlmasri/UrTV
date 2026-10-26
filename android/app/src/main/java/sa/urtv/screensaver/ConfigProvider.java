@@ -20,8 +20,9 @@ import java.util.List;
  * «المهام»: content://sa.urtv.screensaver.config/tasks lists the tasks (i from 1, t, done, at). The launcher
  * may also change them, which needs WRITE_TASKS (signature, same key as READ_CONFIG):
  *   insert  ContentValues t = the text               -> .../tasks/N, or null when refused (empty, full)
- *   update  ContentValues i = N                      -> 1 when task N is marked done
- *   delete  .../tasks/N                              -> 1 when task N is gone
+ *   update  ContentValues id = ID (or i = N)         -> 1 when that task is marked done
+ *   delete  .../tasks/id/ID (or .../tasks/N)         -> 1 when that task is gone
+ * N is the place in the list, which moves when the list does; id is the task's own and stays (the screens use it, `list` shows N).
  *
  * «صوري»: the owner's own photos (Own). query .../own gives n (how many), mode (mix|only) and rev (changes whenever
  * the photos do); openFile .../own/N opens photo N (1..n) read-only, which READ_CONFIG allows the launcher. Nothing
@@ -40,11 +41,11 @@ public class ConfigProvider extends ContentProvider {
             return o;
         }
         if (isTasks(uri)) {
-            MatrixCursor t = new MatrixCursor(new String[] {"i", "t", "done", "at"});
-            List<Prefs.Task> all = p.tasks();
+            MatrixCursor t = new MatrixCursor(new String[] {"i", "t", "done", "at", "id"});
+            List<Task> all = p.tasks();
             for (int k = 0; k < all.size(); k++) {
-                Prefs.Task x = all.get(k);
-                t.addRow(new Object[] {k + 1, x.text, x.done ? 1 : 0, x.at});
+                Task x = all.get(k);
+                t.addRow(new Object[] {k + 1, x.text, x.done ? 1 : 0, x.at, x.id});
             }
             return t;
         }
@@ -95,8 +96,11 @@ public class ConfigProvider extends ContentProvider {
     @Override
     public int delete(Uri uri, String s, String[] a) {
         if (!isTasks(uri) || uri.getPathSegments().size() < 2) return 0;
+        List<String> seg = uri.getPathSegments();
         try {
-            return new Prefs(getContext()).deleteTask(Integer.parseInt(uri.getLastPathSegment())) ? 1 : 0;
+            Prefs p = new Prefs(getContext());
+            if (seg.size() == 3 && "id".equals(seg.get(1))) return p.deleteTaskId(Long.parseLong(seg.get(2))) ? 1 : 0;
+            return p.deleteTask(Integer.parseInt(uri.getLastPathSegment())) ? 1 : 0;
         } catch (NumberFormatException e) {
             return 0;
         }
@@ -104,7 +108,10 @@ public class ConfigProvider extends ContentProvider {
 
     @Override
     public int update(Uri uri, ContentValues v, String s, String[] a) {
-        if (!isTasks(uri) || v == null || v.getAsInteger("i") == null) return 0;
-        return new Prefs(getContext()).doneTask(v.getAsInteger("i")) ? 1 : 0;
+        if (!isTasks(uri) || v == null) return 0;
+        Prefs p = new Prefs(getContext());
+        if (v.getAsLong("id") != null) return p.doneTaskId(v.getAsLong("id")) ? 1 : 0;
+        if (v.getAsInteger("i") == null) return 0;
+        return p.doneTask(v.getAsInteger("i")) ? 1 : 0;
     }
 }

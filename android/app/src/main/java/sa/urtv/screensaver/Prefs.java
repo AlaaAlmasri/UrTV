@@ -411,16 +411,23 @@ final class Prefs {
     static final int MAX_TASKS = 12;
     static final int TASK_CHARS = 60;
 
-    /** One task kept on the TV. */
-    static final class Task {
-        final String text;
-        final boolean done;
-        final long at;
-        Task(String text, boolean done, long at) { this.text = text; this.done = done; this.at = at; }
-    }
+    /** Changes to the list are read-modify-write of one JSON string: one at a time, from the provider, the receiver and the screens alike. */
+    private static final Object TASKS_LOCK = new Object();
 
-    /** All tasks, oldest first (a JSON array of {t, done, at}); the number a person sees is the position + 1. */
-    List<Task> tasks() { return parseTasks(sp.getString("tasks", "[]")); }
+    /**
+     * All tasks, oldest first (a JSON array of {t, done, at, id}); the number a person sees is the position + 1, but a change names the
+     * task by its id. A list saved before ids existed is given them here, once, with everything else as it was.
+     */
+    List<Task> tasks() {
+        synchronized (TASKS_LOCK) {
+            List<Task> v = parseTasks(sp.getString("tasks", "[]"));
+            if (TaskList.needsIds(v)) {
+                v = TaskList.withIds(v, sp.getLong("taskSeq", 0));
+                setTasks(v);
+            }
+            return v;
+        }
+    }
 
     /** The tasks of the saved JSON; an entry that is not a task is skipped, not the whole list lost. */
     static List<Task> parseTasks(String json) {
@@ -430,7 +437,7 @@ final class Prefs {
             for (int k = 0; k < a.length(); k++) {
                 try {
                     JSONObject o = a.getJSONObject(k);
-                    out.add(new Task(o.getString("t"), o.optBoolean("done"), o.optLong("at")));
+                    out.add(new Task(o.getString("t"), o.optBoolean("done"), o.optLong("at"), o.optLong("id")));
                 } catch (JSONException bad) {
                     // one entry that is not a task is skipped; the others are kept (the list is saved back whole)
                 }
@@ -444,9 +451,9 @@ final class Prefs {
     private void setTasks(List<Task> v) {
         JSONArray a = new JSONArray();
         try {
-            for (Task t : v) a.put(new JSONObject().put("t", t.text).put("done", t.done).put("at", t.at));
+            for (Task t : v) a.put(new JSONObject().put("t", t.text).put("done", t.done).put("at", t.at).put("id", t.id));
         } catch (JSONException ignored) { }
-        sp.edit().putString("tasks", a.toString()).apply();
+        sp.edit().putString("tasks", a.toString()).putLong("taskSeq", TaskList.lastId(v, sp.getLong("taskSeq", 0))).apply();
     }
 
     /** Trimmed, one line, at most TASK_CHARS characters; "" when nothing is left. */
@@ -460,37 +467,52 @@ final class Prefs {
     String addTask(String raw) {
         String text = cleanTask(raw);
         if (text.isEmpty()) return "the task is empty";
-        List<Task> v = tasks();
-        while (v.size() >= MAX_TASKS) {
-            int old = -1;
-            for (int k = 0; k < v.size() && old < 0; k++) if (v.get(k).done) old = k;
-            if (old < 0) return "at most " + MAX_TASKS + " tasks; finish or delete one first";
-            v.remove(old);
+        synchronized (TASKS_LOCK) {
+            List<Task> v = tasks();
+            List<Task> out = TaskList.add(v, text, System.currentTimeMillis(), TaskList.lastId(v, sp.getLong("taskSeq", 0)) + 1, MAX_TASKS);
+            if (out == null) return "at most " + MAX_TASKS + " tasks; finish or delete one first";
+            setTasks(out);
+            return null;
         }
-        v.add(new Task(text, false, System.currentTimeMillis()));
-        setTasks(v);
-        return null;
     }
 
-    /** n counts from 1; false when there is no such task */
+    /** n counts from 1 (what `list` shows); false when there is no such task */
     boolean doneTask(int n) {
-        List<Task> v = tasks();
-        if (n < 1 || n > v.size()) return false;
-        Task t = v.get(n - 1);
-        v.set(n - 1, new Task(t.text, true, t.at));
-        setTasks(v);
-        return true;
+        synchronized (TASKS_LOCK) {
+            List<Task> v = tasks();
+            return n >= 1 && n <= v.size() && doneTaskId(v.get(n - 1).id);
+        }
     }
 
     boolean deleteTask(int n) {
-        List<Task> v = tasks();
-        if (n < 1 || n > v.size()) return false;
-        v.remove(n - 1);
-        setTasks(v);
-        return true;
+        synchronized (TASKS_LOCK) {
+            List<Task> v = tasks();
+            return n >= 1 && n <= v.size() && deleteTaskId(v.get(n - 1).id);
+        }
     }
 
-    void clearTasks() { sp.edit().remove("tasks").apply(); }
+    /** the task with this id is marked done; false when it is gone */
+    boolean doneTaskId(long id) {
+        synchronized (TASKS_LOCK) {
+            List<Task> out = TaskList.markDone(tasks(), id);
+            if (out == null) return false;
+            setTasks(out);
+            return true;
+        }
+    }
+
+    boolean deleteTaskId(long id) {
+        synchronized (TASKS_LOCK) {
+            List<Task> out = TaskList.remove(tasks(), id);
+            if (out == null) return false;
+            setTasks(out);
+            return true;
+        }
+    }
+
+    void clearTasks() {
+        synchronized (TASKS_LOCK) { sp.edit().remove("tasks").apply(); }
+    }
 
     /** "&tasks=" and the open tasks, one per line, URL-encoded; nothing when there are none (the page shows «لا مهام اليوم»). */
     private String openTasksParam() {
