@@ -168,13 +168,20 @@ fi
 
 if [ "$what" = saver ] || [ "$what" = all ]; then
   push_install urtv-screensaver.apk sa.urtv.screensaver
-  printf '%s\n' \
-    "settings put secure screensaver_enabled 1" \
-    "settings put secure screensaver_components sa.urtv.screensaver/.ScreenDream" \
-    "settings put secure screensaver_default_component sa.urtv.screensaver/.ScreenDream" \
-    "am start --activity-clear-task -n sa.urtv.screensaver/.SettingsActivity" \
-    | "$PY" -I optimize/tv.py --batch
-  echo "Screensaver installed and selected. Its settings screen is open on the TV."
+  # a WebView older than 80 cannot run the page: the TV keeps its own screensaver (ours is installed, not selected) until
+  # the person updates «Android System WebView»; precheck.sh held exits 4 then, and says nothing when it cannot tell
+  held=0; PY="$PY" optimize/precheck.sh held > /dev/null 2>&1 || { [ "$?" != 4 ] || held=1; }
+  if [ "$held" = 1 ]; then
+    echo "!! The screensaver is installed but NOT switched on: this TV's WebView is older than 80 and the page would not run, so the TV keeps its own screensaver. Update «Android System WebView» in the Play Store (optimize/precheck.sh webview-store opens it), then run optimize/install.sh saver again."
+  else
+    printf '%s\n' \
+      "settings put secure screensaver_enabled 1" \
+      "settings put secure screensaver_components sa.urtv.screensaver/.ScreenDream" \
+      "settings put secure screensaver_default_component sa.urtv.screensaver/.ScreenDream" \
+      "am start --activity-clear-task -n sa.urtv.screensaver/.SettingsActivity" \
+      | "$PY" -I optimize/tv.py --batch
+    echo "Screensaver installed and selected. Its settings screen is open on the TV."
+  fi
 fi
 
 if [ "$what" = launcher ] || [ "$what" = all ]; then
