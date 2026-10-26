@@ -153,6 +153,8 @@ public class SettingsActivity extends Activity {
             new Runnable() { public void run() { prefs.setYearStrip(!prefs.yearStrip()); render(); } });
         row("المناسبات الوطنية", Prefs.nationalLabel(prefs.national()), R.drawable.ic_eye,
             new Runnable() { public void run() { pickNational(); } });
+        row("حجم الساعة", Prefs.clockSizeLabel(prefs.clockSize()), R.drawable.ic_eye,
+            new Runnable() { public void run() { pickClockSize(); } });
         row("الخانة اليسرى", Prefs.slotLabel(prefs.slot()), R.drawable.ic_eye,
             new Runnable() { public void run() { pickSlot(); } });
         if ("countdown".equals(prefs.slot()) || !prefs.countdownDate().isEmpty())
@@ -160,6 +162,8 @@ public class SettingsActivity extends Activity {
                 new Runnable() { public void run() { manageCountdown(); } });
 
         header("الأسواق (أعلى اليسار)");
+        row("شريط الأسواق", prefs.marketsOn() ? "يعمل" : "مخفي · يبقى طقس اليوم فقط", R.drawable.ic_eye,
+            new Runnable() { public void run() { prefs.setMarketsOn(!prefs.marketsOn()); render(); } });
         row("الأسواق (" + arabicNum(prefs.markets().size()) + "/" + arabicNum(Prefs.MAX_MARKETS) + ")", marketsLabel(),
             R.drawable.ic_trophy, new Runnable() { public void run() { pickMarkets(); } });
         row("عرض الأسواق", Prefs.mkStyleLabel(prefs.mkStyle()), R.drawable.ic_eye,
@@ -666,6 +670,7 @@ public class SettingsActivity extends Activity {
                     return;
                 }
                 prefs.setMarkets(v);
+                prefs.setMarketsOn(true);
                 render();
             })
             .setNegativeButton("إلغاء", null).show();
@@ -710,6 +715,18 @@ public class SettingsActivity extends Activity {
         }
         new Dlg(this).setTitle("عرض الأسواق")
             .setSingleChoiceItems(labels, sel, (d, i) -> { prefs.setMkStyle(Prefs.MK_STYLES[i][0]); d.dismiss(); render(); })
+            .show();
+    }
+
+    private void pickClockSize() {
+        String[] labels = new String[Prefs.CLOCK_SIZES.length];
+        int sel = 0;
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = Prefs.CLOCK_SIZES[i][1];
+            if (Prefs.CLOCK_SIZES[i][0].equals(prefs.clockSize())) sel = i;
+        }
+        new Dlg(this).setTitle("حجم الساعة")
+            .setSingleChoiceItems(labels, sel, (d, i) -> { prefs.setClockSize(Prefs.CLOCK_SIZES[i][0]); d.dismiss(); render(); })
             .show();
     }
 

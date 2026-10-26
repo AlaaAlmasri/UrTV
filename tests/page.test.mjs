@@ -3292,6 +3292,79 @@ for (const [style, w, h] of [['current', 1920, 1080], ['dark1', 1920, 1080], ['g
   await ctx.close();
 }
 
+const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','matches','verse','wisdom','adhkar','stocks','tasks','year','smart','today'];
+// ---- «شريط الأسواق»: #mkbar=off hides the markets line, keeps the weather, asks for nothing; the saved list comes back with on
+{
+  const SHOTS = process.env.SHOTS;   // a folder: the pictures of the new options are written there
+  const seen = [];
+  const watch = r => { const u = r.request().url(); if (/chart\/|coingecko|data-markets/.test(u)) seen.push(u); return marketNet({})(r); };
+  for (const [hash, shown, asks] of [['markets=tasi,gold&mkbar=off', false, false], ['markets=tasi,gold&mkbar=on', true, true], ['markets=tasi,gold', true, true],
+                                      ['markets=tasi,gold&mkbar=off&slot=markets', false, true]]) {
+    seen.length = 0;
+    const { p, ctx, errors } = await open('tv.html', hash, { net: watch });
+    await p.waitForTimeout(500);
+    const r = await p.evaluate(() => ({ mk: getComputedStyle(document.querySelector('.mk')).display, wx: getComputedStyle(document.querySelector('.wxline')).display,
+      bar: CONFIG.mkBar, list: CONFIG.markets.join(), up: !!document.getElementById('mk-up') && !document.getElementById('mk-up').hidden }));
+    check(`markets bar «${hash}»: ${shown ? 'shown' : 'hidden, the weather stays'}`, !errors.length && (r.mk !== 'none') === shown && r.wx !== 'none' && r.list === 'tasi,gold', JSON.stringify(r) + errors);
+    check(`markets bar «${hash}»: ${asks ? 'prices are asked for' : 'no market request at all'}`, (seen.length > 0) === asks, seen.join(' '));
+    if (SHOTS && /^markets=tasi,gold&mkbar=(off|on)$/.test(hash)) await p.screenshot({ path: path.join(SHOTS, 'mkbar-' + hash.split('=').pop() + '.png') });
+    await ctx.close();
+  }
+  {   // prices style: the «آخر تحديث» line goes with the bar
+    const { p, ctx } = await open('tv.html', 'markets=tasi,gold&mkstyle=prices&mkbar=off', { net: marketNet({}) });
+    await p.waitForTimeout(500);
+    const r = await p.evaluate(() => ({ mk: getComputedStyle(document.querySelector('.mk')).display, up: getComputedStyle(document.getElementById('mk-up')).display }));
+    check('markets bar off with prices: the line and its update note are both gone', r.mk === 'none' && r.up === 'none', JSON.stringify(r));
+    await ctx.close();
+  }
+  {   // off, then on again: the saved prices come back at once (the bar's key is the list, not the switch)
+    const { p, ctx } = await open('tv.html', 'markets=tasi,gold&mkbar=on', { net: marketNet({}) });
+    await p.waitForTimeout(500);
+    const kept = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('mk:')).join());
+    check('markets bar: the saved prices are keyed by the list only', kept === 'mk:tasi,gold', kept);
+    await ctx.close();
+  }
+}
+
+// ---- «حجم الساعة»: #clocksize=large|medium|small, every card, three screen sizes: nothing overlaps or goes off screen
+{
+  const SHOTS = process.env.SHOTS;
+  const sizes = { large: null, medium: 'medium', small: 'small' };
+  const widths = {};
+  for (const [w, h] of [[960, 540], [1280, 720], [1920, 1080]]) {
+    for (const [name, v] of Object.entries(sizes)) {
+      const bad = [], errs = [];
+      for (const panel of [...CARD_KINDS_TEST, 'none']) {
+        const { p, ctx, errors } = await open('tv.html', `teams=136013&panel=${panel}&slot=weather` + (v ? '&clocksize=' + v : ''), { width: w, height: h, now: HOME_NOW });
+        if (SAMPLE[panel]) await p.evaluate(`(${SAMPLE[panel]})(); renderPanel(false);`);
+        const r = await p.evaluate(() => {
+          const box = e => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width }; };
+          const vis = s => { const e = document.querySelector(s); return e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width ? e : null; };
+          const parts = ['.top', '.clock', '.week', '.bottom'].map(s => [s, vis(s)]).filter(x => x[1]).map(x => [x[0], box(x[1])]);
+          const hit = [];
+          for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+            const a = parts[i][1], b = parts[j][1];
+            if (a.l < b.r - 1 && b.l < a.r - 1 && a.t < b.b - 1 && b.t < a.b - 1) hit.push(parts[i][0] + '×' + parts[j][0]);
+          }
+          const off = parts.filter(([, b]) => b.l < -1 || b.r > innerWidth + 1 || b.b > innerHeight + 1).map(x => x[0]);
+          const latin = (document.querySelector('.stage').innerText.match(/[0-9]+/g) || []).filter(x => x !== '500');
+          return { hit, off, latin, cw: box(document.querySelector('.clock')).w };
+        });
+        if (r.hit.length || r.off.length || r.latin.length) bad.push(panel + ':' + JSON.stringify(r));
+        if (panel === 'prayers') widths[w + name] = r.cw;
+        if (SHOTS && panel === 'prayers' && w === 1920) await p.screenshot({ path: path.join(SHOTS, `clocksize-${name}.png`) });
+        errs.push(...errors);
+        await ctx.close();
+      }
+      check(`clock ${name} at ${w}x${h}: every card, nothing overlaps or goes off screen, Arabic digits`, !bad.length && !errs.length, bad.join(' | ') + errs.join('; '));
+    }
+    check(`clock sizes at ${w}x${h}: large > medium > small`, widths[w + 'large'] > widths[w + 'medium'] && widths[w + 'medium'] > widths[w + 'small'], JSON.stringify(widths));
+  }
+  const { p, ctx } = await open('tv.html', 'clocksize=huge');
+  check('clocksize: anything else is large', await p.evaluate(() => CONFIG.clockSize === 'large' && !/ck-/.test(document.documentElement.className)));
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failed ? `\n${failed} failed` : '\nall page tests passed');
 process.exit(failed ? 1 : 0);

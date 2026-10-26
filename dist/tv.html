@@ -375,6 +375,9 @@
     color:#FFFDF6;font-variant-numeric:tabular-nums;
     text-shadow:0 4px 70px rgba(0,0,0,.65), 0 0 130px rgba(255,236,190,.12);
   }
+  /* «حجم الساعة» (#clocksize=): large is the clock above; the others only scale its font (the sub line and the cards keep their sizes) */
+  html.ck-medium .clock{font-size:clamp(96px,min(13.6vw,24.8vh),276px)}
+  html.ck-small .clock{font-size:clamp(74px,min(10.5vw,19vh),214px)}
   .clock .d{unicode-bidi:isolate}
   .clock .d i{font-style:normal}
   .clock .d i + i{margin-left:var(--digit-gap,.09em)}
@@ -465,6 +468,7 @@
   .rule.l{margin-left:0;margin-right:auto;background:linear-gradient(90deg,var(--gold),rgba(var(--gold-rgb),0))}
   .mk{margin-top:1.2vh;display:flex;justify-content:flex-end;gap:1.6em;white-space:nowrap;
     font-size:clamp(12px,1.06vw,21px);font-weight:400;color:#D8CDB6}
+  .mk[hidden],.mkup[hidden]{display:none}
   .mk .m{display:inline-flex;align-items:baseline;gap:.45em}
   .mk .delta{font-size:.72em}
   .mk .m.old,.mkup.old{opacity:.55}   /* the last price, a refresh failed or it is a day old */
@@ -646,12 +650,16 @@ const CONFIG = {
   // digits everywhere: #digits=hindi (١٢٣, the default) or latin (123); anything else = hindi
   digits: _Q.get('digits') === 'latin' ? 'latin' : 'hindi',
   // the look of the card beside the clock: #cardstyle=current|dark1|glass1|dark3|glass3 (anything else = current)
+  // the size of the clock: #clocksize=large|medium|small (anything else = large)
+  clockSize: (v => ['medium','small'].includes(v) ? v : 'large')(_Q.get('clocksize')),
   cardStyle: (v => ['dark1','glass1','dark3','glass3'].includes(v) ? v : 'current')(_Q.get('cardstyle')),
   // the markets at the top left: #markets=tasi,spx,btc (up to 4 of tasi aramco spx btc gold silver xrp; anything else = the default)
   // and #mkstyle=arrows (a ▲/▼ only, the default) or prices (the price and the day's change)
   markets: (l => l.length ? l : ['tasi','spx','btc'])(
     _list('markets').filter((k, i, a) => ['tasi','aramco','spx','btc','gold','silver','xrp'].includes(k) && a.indexOf(k) === i).slice(0, 4)),
   mkStyle: _Q.get('mkstyle') === 'prices' ? 'prices' : 'arrows',
+  // #mkbar=off hides the markets line at the top (the weather stays); the list above is kept and no request is made for it
+  mkBar: _Q.get('mkbar') !== 'off',
   // the national days (23 September, 22 February): #national=auto (the default) or off
   national: _Q.get('national') === 'off' ? 'off' : 'auto',
   // the stocks card's watchlist: #stocks=2222,1120,AAPL,NVDA (up to 8; 4 digits = a Tadawul code, letters = a US ticker)
@@ -695,7 +703,7 @@ const LS = {
   hourly: 'hourly:' + CONFIG.latitude.toFixed(3) + ',' + CONFIG.longitude.toFixed(3),
   wx: 'wx:' + CONFIG.latitude.toFixed(3) + ',' + CONFIG.longitude.toFixed(3),
   stocks: 'stocks:' + CONFIG.stocks.slice().sort().join(','),
-  mk: 'mk:' + CONFIG.markets.join(','),
+  mk: 'mk:' + CONFIG.markets.join(','),   // the on/off switch is not in the key: the prices are the same
   matches: 'matchesOk:' + CONFIG.teamIds.join(',') + '|' + CONFIG.leagues.join(','),
   snap: 'snap6:' + location.hash,
 };
@@ -1697,8 +1705,9 @@ const PRICES = CONFIG.mkStyle === 'prices';
 
 // the default list with arrows is the markup in the page; anything else is made here, before the saved copy is put back
 function buildMarkets(){
-  if(!PRICES && TICKERS.map(t => t.key).join() === 'tasi,spx,btc') return;
   const mk = document.querySelector('.mk');
+  mk.hidden = !CONFIG.mkBar;
+  if(!PRICES && TICKERS.map(t => t.key).join() === 'tasi,spx,btc') return;
   mk.className = 'mk' + (PRICES ? ' px' : '') + (PRICES && TICKERS.length > 2 ? ' g' : '');
   mk.innerHTML = TICKERS.map(t => `<span class="m"><span>${esc(t.name)}</span>`
     + (PRICES ? `<span class="px" id="${t.px}"${t.unit ? ` data-u="${t.unit}"` : ''} hidden></span>` : '')
@@ -1845,6 +1854,7 @@ function paintMarket(t, price, pct, at){
 }
 // the dim state of each market and the line under them: «آخر تحديث ٣:١٥ م» (the oldest price that is not current), or «غير محدّث»
 function paintMkUp(){
+  if(!CONFIG.mkBar) return;
   const known = TICKERS.filter(t => MK_LAST[t.key]);
   if(!known.length) return;
   known.forEach(t => { const m = document.getElementById(t.chg); if(m && m.parentNode) m.parentNode.classList.toggle('old', !!staleMark(MK_LAST[t.key])); });
@@ -1938,7 +1948,7 @@ function staleMark(v){
 }
 
 // One tick for the markets line and the stocks card: each symbol once (a stock on both is asked once), one request at a time.
-const WITH_LINE = !CONFIG.widget;   // the launcher's page has no markets line
+const WITH_LINE = !CONFIG.widget && (CONFIG.mkBar || CONFIG.slot === 'markets');   // no line in the launcher's page; hidden = no requests (unless the slot shows them)
 const loadMarkets = guarded('markets', async function(){
   const jobs = new Map();   // Yahoo symbol -> {key, cg, intra, tk: its markets, sk: its stocks}
   const job = (key, cg, intra) => {
@@ -3146,6 +3156,7 @@ function boot(){
   if(CONFIG.slot === 'none') document.documentElement.classList.add('slot-none');
   if(!SLOT_MATCHES) document.getElementById('match-row').textContent = '';   // not «لا شيء هذا الأسبوع»: that is the matches slot's
   if(CONFIG.cardStyle !== 'current') document.documentElement.classList.add('cs-' + CONFIG.cardStyle);
+  if(CONFIG.clockSize !== 'large') document.documentElement.classList.add('ck-' + CONFIG.clockSize);
   buildMarkets();
   restoreSnap();
   paintMkUp(); wxExpire();
