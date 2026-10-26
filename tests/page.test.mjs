@@ -1701,7 +1701,10 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
   const proLeague = clubs.filter(c => c.leagues.includes('Saudi-Arabian Pro League') && !c.leagues.includes('Saudi First Division League'));
   const longest = clubs.filter(c => c.sport === 'Soccer').sort((a, b) => b.ar.length - a.ar.length).slice(0, 4);
   const side = [...proLeague.slice(0, 14), ...longest];   // 18 sides: the 4 longest names make games 3 and 6 the worst case
-  const at = h => new Date(Date.now() + h * 36e5).toISOString().slice(0, 19) + 'Z';
+  // a fixed moment, so the day names in the rows never depend on the day the test runs: a Monday, and the last game (50 h on) is a
+  // Wednesday 8:12, the longest weekday with wide digits, «بعد يومين»
+  const LEAGUE_NOW = new Date('2026-10-26T03:12:00Z');
+  const at = h => new Date(LEAGUE_NOW.getTime() + h * 36e5).toISOString().slice(0, 19) + 'Z';
   // game 0 is the followed club's (Al-Hilal, 136013, kicks off in 3 h); 1 is under way; 2 finished 3 h ago; the rest to come
   const hrs = [3, -1, -3.2, 5, 9, 26, 28, 30, 50];
   const hilal = clubs.find(c => c.id === '136013');
@@ -1713,7 +1716,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
              strStatus: i === 1 ? '1H' : i === 2 ? 'FT' : 'NS', intHomeScore: i === 1 ? '1' : i === 2 ? '2' : null,
              intAwayScore: i === 1 ? '0' : i === 2 ? '1' : null, strProgress: i === 1 ? '58' : null };
   });
-  const FILE = { league: 'Saudi-Arabian Pro League', id: '4668', updated: new Date(Date.now() - 36e5).toISOString(), events: ROUND };
+  const FILE = { league: 'Saudi-Arabian Pro League', id: '4668', updated: new Date(LEAGUE_NOW.getTime() - 36e5).toISOString(), events: ROUND };
   const seen = [];
   const mock = r => {
     const u = new URL(r.request().url()), hdr = { 'Access-Control-Allow-Origin': '*' };
@@ -1733,6 +1736,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
     seen.length = 0;
+    await p.clock.setFixedTime(LEAGUE_NOW);
     await p.goto(page('tv.html') + '#gap=0&teams=136013&leagues=' + encodeURIComponent('Saudi-Arabian Pro League') + '&panel=matches');
     await p.waitForTimeout(1200);
     const tag = `league round at ${width}x${height}`;
@@ -2858,12 +2862,12 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
       return false;
     } });
     await p.waitForTimeout(500);
-    const first = await p.evaluate(() => document.getElementById('wx-desc').textContent);
+    const first = await p.evaluate(() => document.getElementById('wx-dust').textContent);
     round = 2;
     await p.evaluate(() => loadWeather());
     await p.waitForTimeout(500);
-    const second = await p.evaluate(() => ({ t: document.getElementById('wx-desc').textContent, dust: document.getElementById('wx-desc').classList.contains('dust') }));
-    check('weather: the last good dust reading stands when the air-quality request fails', first === 'غبار' && second.t === 'غبار' && second.dust, first + ' / ' + JSON.stringify(second));
+    const second = await p.evaluate(() => ({ t: document.getElementById('wx-dust').textContent, sky: document.getElementById('wx-desc').textContent }));
+    check('weather: the last good dust reading stands when the air-quality request fails, beside the condition', first === 'غبار' && second.t === 'غبار' && second.sky === 'صافي', first + ' / ' + JSON.stringify(second));
     await ctx.close();
   }
 }

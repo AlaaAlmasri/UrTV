@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- the build: UTC time (YYYYMMDDHHMMSS) of the newest commit of the page's sources, put in by src/build.py. The app loads the page with the newer stamp (its own
      copy or a downloaded one), never by file time, and does not keep a download whose stamp is older than its own (Updater, PageStamp). -->
-<meta name="urtv-build" content="20261026032124">
+<meta name="urtv-build" content="20261026033518">
 <title>شاشة تلفزيونك</title>
 <style>
   @font-face{font-family:'Thmanyah';font-weight:300;font-style:normal;font-display:block;src:url("https://raw.githubusercontent.com/tshi-dev/UrTV/master/assets/fonts/Thmanyah-Light.woff2") format("woff2")}
@@ -1628,7 +1628,7 @@ function fitMatches(row){
 // row again (the names and the date keep their full form in data-full), so a card that gets smaller redoes it.
 const rowCut = row => {
   const r = row.getBoundingClientRect();
-  return [...row.children].some(c => { const b = c.getBoundingClientRect(); return b.width && (b.left < r.left - .5 || b.right > r.right + .5); });
+  return [...row.children].some(c => { const b = c.getBoundingClientRect(); return b.width && (b.left < r.left - .05 || b.right > r.right + .05); });   // as strict as fits(): a game over by half a pixel is still cut
 };
 function fitGameRow(li){
   const row = li.firstElementChild;

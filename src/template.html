@@ -1624,7 +1624,7 @@ function fitMatches(row){
 // row again (the names and the date keep their full form in data-full), so a card that gets smaller redoes it.
 const rowCut = row => {
   const r = row.getBoundingClientRect();
-  return [...row.children].some(c => { const b = c.getBoundingClientRect(); return b.width && (b.left < r.left - .5 || b.right > r.right + .5); });
+  return [...row.children].some(c => { const b = c.getBoundingClientRect(); return b.width && (b.left < r.left - .05 || b.right > r.right + .05); });   // as strict as fits(): a game over by half a pixel is still cut
 };
 function fitGameRow(li){
   const row = li.firstElementChild;
