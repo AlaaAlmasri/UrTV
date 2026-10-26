@@ -42,6 +42,7 @@ python3 tests/community_test.py
 python3 tests/reset_screensaver_test.py
 python3 tests/task_voice_test.py
 python3 tests/task_ids_test.py
+python3 tests/render_gone_test.py
 python3 tests/sleep_boot_test.py
 python3 tests/photo_prep_test.py
 python3 tests/photos_sh_test.py
