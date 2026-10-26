@@ -41,6 +41,7 @@
 #   optimize/saver.sh leagues 'Saudi-Arabian Pro League'   whole leagues, up to 5, by English or Arabic name (دوري روشن السعودي);
 #                                                  every game of every club in them joins the teams' games ("" = none)
 #   optimize/saver.sh events f1,ufc               other sports beside the teams' games: f1 ufc boxing  ("" = none)
+#   optimize/saver.sh prayermethod jafari|auto     «طريقة الحساب»: auto (the default) = the city's country's own, jafari = Shia Ithna-Ashari (Leva, Qum)
 #   optimize/saver.sh prayeradj on|off             «تعديل وقت الصلاة» (off by default): each prayer moved by its own whole minutes, -20..20
 #   optimize/saver.sh prayeradj fajr +2 maghrib -1   the minutes of fajr dhuhr asr maghrib isha (the others stay); sunrise is never moved
 #   optimize/saver.sh update                       download the latest screen now
@@ -192,6 +193,16 @@ case "${1:-}" in
              send TASKS "--es op $2 --ei n $3" ;;
       *) echo "usage: optimize/saver.sh tasks list | add 'نص' | done N | del N | clear"; exit 1 ;;
     esac ;;
+  prayermethod)
+    shift
+    case "${1:-}" in
+      jafari|auto) [ $# -eq 1 ] || { echo "usage: optimize/saver.sh prayermethod jafari|auto"; exit 1; } ;;
+      *) echo "usage: optimize/saver.sh prayermethod jafari|auto   (auto = the city's country's own method)"; exit 1 ;;
+    esac
+    rc=0; send SET "--es prayermethod $1" || rc=$?
+    # the home app's adhan alarm was set for the old times: set it again now (no launcher, no harm)
+    [ "$rc" != 0 ] || "$PY" -I optimize/tv.py "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN_RESCHEDULE" > /dev/null 2>&1 || true
+    exit "$rc" ;;
   prayeradj)
     shift
     [ $# -gt 0 ] || { echo "usage: optimize/saver.sh prayeradj on|off | fajr +2 | maghrib -1 …   (fajr dhuhr asr maghrib isha; minutes -20..20)"; exit 1; }

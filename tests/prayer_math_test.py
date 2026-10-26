@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory() as tmp:
     subprocess.run(["javac", "-encoding", "UTF-8", "-d", tmp,
                     str(ROOT / "android/launcher/src/main/java/sa/urtv/home/tilawah/PrayerMath.java"),
                     str(ROOT / "tests/PrayerMathRun.java")], check=True)
-    run = subprocess.run(["java", "-Dfile.encoding=UTF-8", "-cp", tmp, "sa.urtv.home.tilawah.PrayerMathRun"], capture_output=True)
+    run = subprocess.run(["java", "-Dfile.encoding=UTF-8", "-cp", tmp, "sa.urtv.home.tilawah.PrayerMathRun", str(ROOT / "tests/prayer_gold.tsv")], capture_output=True)
 out = run.stdout.decode("utf-8")
 print(out, end="")
 if run.returncode != 0 or "FAIL" in out:

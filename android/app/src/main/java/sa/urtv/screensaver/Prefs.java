@@ -124,7 +124,7 @@ final class Prefs {
         sp.edit().putString("cityName", name).putString("cityLat", lat).putString("cityLon", lon).putString("cityTz", tz).apply();
     }
 
-    /** The time zone the page shows: Asia/Riyadh for a built-in (Saudi) city; a place of your own gets the one given
+    /** The time zone the page shows: Asia/Riyadh for a built-in Saudi city, the country's own for a Gulf one; a place of your own gets the one given
      *  with it, else the TV's own. */
     String cityTz() {
         String own = sp.getString("cityTz", "");
@@ -132,9 +132,13 @@ final class Prefs {
         String[] c = city();
         for (Cities.Region r : Cities.REGIONS)
             for (String[] x : r.cities)
-                if (x[0].equals(c[0]) && x[1].equals(c[1]) && x[2].equals(c[2])) return TZ;
+                if (x[0].equals(c[0]) && x[1].equals(c[1]) && x[2].equals(c[2])) return x.length > 3 ? x[3] : TZ;   // the Gulf cities carry their own
         return java.util.TimeZone.getDefault().getID();
     }
+
+    /** «طريقة الحساب» (default auto = the country's own): PrayerMethod.AUTO or JAFARI; sent as #pm=jafari only for the latter. */
+    String prayerMethod() { return PrayerMethod.JAFARI.equals(sp.getString("prayerMethod", "auto")) ? PrayerMethod.JAFARI : PrayerMethod.AUTO; }
+    void setPrayerMethod(String v) { sp.edit().putString("prayerMethod", v).apply(); }
 
     static final int MAX_TEAMS = 20;
     /** Whole leagues followed (#leagues=): the page downloads one small file for each, every 30 minutes. */
@@ -384,6 +388,7 @@ final class Prefs {
             + "&adhanbar=" + (adhanBar() ? "1" : "0")
             + "&yearstrip=" + (yearStrip() ? "1" : "0")
             + PrayerAdj.fragment(prayerAdjOn(), prayerAdj())
+            + PrayerMethod.fragment(prayerMethod())
             + "&national=" + national()
             + "&markets=" + join(markets(), ",")
             + "&mkstyle=" + mkStyle()

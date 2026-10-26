@@ -129,6 +129,9 @@ public class SettingsActivity extends Activity {
         header("الموقع");
         row("المدينة", prefs.city()[0], R.drawable.ic_place, new Runnable() { public void run() { pickCity(); } });
 
+        row("طريقة الحساب", PrayerMethod.label(prefs.prayerMethod(), prefs.cityTz()), R.drawable.ic_place,
+            new Runnable() { public void run() { pickPrayerMethod(); } });
+
         header("المباريات");
         row("الفرق المتابعة (" + arabicNum(prefs.teams().size()) + "/" + arabicNum(Prefs.MAX_TEAMS) + ")", teamsLabel(),
             R.drawable.ic_trophy, new Runnable() { public void run() { manageTeams(); } });
@@ -235,18 +238,21 @@ public class SettingsActivity extends Activity {
         }
         new Dlg(this).setTitle(r.name)
             .setSingleChoiceItems(names, sel, (d, i) -> {
-                prefs.setCity(r.cities[i][0], r.cities[i][1], r.cities[i][2]);
+                prefs.setCity(r.cities[i][0], r.cities[i][1], r.cities[i][2]);   // the zone follows from the list (Prefs.cityTz)
                 d.dismiss();
                 render();
             }).show();
     }
 
-    // any place in Saudi Arabia, from Open-Meteo's GeoNames search
+    // any place in Saudi Arabia or the other Gulf states, from Open-Meteo's GeoNames search (it takes one country at a time, so the
+    // hundred best matches of the world are asked for and the Gulf ones kept)
     private void searchCity() {
-        ask("اسم المدينة أو القرية", q -> fetch("https://geocoding-api.open-meteo.com/v1/search?count=20&language=ar&countryCode=SA&name="
+        ask("اسم المدينة أو القرية", q -> fetch("https://geocoding-api.open-meteo.com/v1/search?count=100&language=ar&name="
             + Uri.encode(q), json -> {
-                JSONArray a = new JSONObject(json).optJSONArray("results");
-                if (a == null || a.length() == 0) { toast("لا توجد نتائج"); return; }
+                JSONArray all = new JSONObject(json).optJSONArray("results"), a = new JSONArray();
+                for (int k = 0; all != null && k < all.length() && a.length() < 20; k++)
+                    if (PrayerMethod.searchable(all.getJSONObject(k).optString("country_code"))) a.put(all.getJSONObject(k));
+                if (a.length() == 0) { toast("لا توجد نتائج"); return; }
                 final int n = a.length();
                 final String[] names = new String[n], lats = new String[n], lons = new String[n], zones = new String[n], rows = new String[n];
                 for (int i = 0; i < n; i++) {
@@ -256,7 +262,8 @@ public class SettingsActivity extends Activity {
                     lons[i] = String.valueOf(c.optDouble("longitude"));
                     zones[i] = c.optString("timezone", "");   // the place's own; empty: the TV's (Prefs.cityTz)
                     String region = c.optString("admin1", "");
-                    rows[i] = region.isEmpty() ? names[i] : names[i] + "  ·  " + region;
+                    String country = c.optString("country", "");   // several countries now: the row says which
+                    rows[i] = names[i] + (region.isEmpty() ? "" : "  ·  " + region) + (country.isEmpty() ? "" : "  ·  " + country);
                 }
                 new Dlg(this).setTitle("اختر المكان")
                     .setItems(rows, (d, i) -> { prefs.setCity(names[i], lats[i], lons[i], zones[i]); render(); }).show();
@@ -768,6 +775,15 @@ public class SettingsActivity extends Activity {
         }
         new Dlg(this).raw().setTitle("الأرقام")
             .setSingleChoiceItems(labels, sel, (d, i) -> { prefs.setDigits(Prefs.DIGITS[i][0]); d.dismiss(); render(); })
+            .show();
+    }
+
+    private void pickPrayerMethod() {
+        final String[] values = {PrayerMethod.AUTO, PrayerMethod.JAFARI};
+        String[] labels = {PrayerMethod.label(PrayerMethod.AUTO, prefs.cityTz()), PrayerMethod.label(PrayerMethod.JAFARI, prefs.cityTz())};
+        new Dlg(this).raw().setTitle("طريقة الحساب")
+            .setSingleChoiceItems(labels, PrayerMethod.JAFARI.equals(prefs.prayerMethod()) ? 1 : 0,
+                (d, i) -> { prefs.setPrayerMethod(values[i]); d.dismiss(); render(); })
             .show();
     }
 

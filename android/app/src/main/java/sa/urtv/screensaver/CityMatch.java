@@ -17,6 +17,21 @@ final class CityMatch {
         return b.toString();
     }
 
+    /**
+     * The time zone of the built-in city a typed name stands for (the name in full, or a short form that fits only one): Asia/Riyadh for a
+     * Saudi one, the country's own for a Gulf one; null when it is not one. A place given with its own coordinates under a built-in name
+     * has no zone of its own to give, and the TV's would be a guess, so it takes this one.
+     */
+    static String zoneOf(String typed) {
+        for (Cities.Region r : Cities.REGIONS)
+            for (String[] city : r.cities)
+                if (city[0].equals(typed)) return zone(city);
+        List<String[]> hits = find(typed);
+        return hits.size() == 1 ? zone(hits.get(0)) : null;
+    }
+
+    static String zone(String[] city) { return city.length > 3 ? city[3] : "Asia/Riyadh"; }
+
     /** The built-in cities that the typed name stands for: none, one, or several (the caller lists them). */
     static List<String[]> find(String typed) {
         String q = key(typed);

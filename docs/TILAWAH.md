@@ -81,7 +81,7 @@ right and the left arrow to the left.
 
 ## The adhan
 
-- **The times** are Umm al-Qura, computed on the TV with no network: Fajr at 18.5°, Maghrib at
+- **The times** are the calculation of the city's country (Umm al-Qura for Saudi Arabia and anywhere outside the Gulf; Kuwait, Qatar, the UAE, Bahrain and Oman each their own; the Shia Ja'fari one when «طريقة الحساب» says so: `docs/SETTINGS.md`), computed on the TV with no network. For Umm al-Qura: Fajr at 18.5°, Maghrib at
   sunset, Asr at shadow factor 1, Isha 90 minutes after Maghrib (120 in Ramadan, from the
   Umm al-Qura calendar) — an absolute moment, so a Maghrib near midnight at a high latitude gives an Isha after midnight,
   never an hour that has already gone. This is the same arithmetic as the screensaver's page and the same method
@@ -210,7 +210,7 @@ CI builds the home app with the screensaver, renames it to `urtv-home.apk`, and 
 
 - Live streams depend on third parties; a station can be down, move, or be blocked on some networks.
 - No downloads/offline mode for surahs, by design (the adhan recordings are cached).
-- The adhan times are Umm al-Qura; a TV outside Saudi Arabia gets that method for its own
-  coordinates, which is the project's choice, not a local authority's calendar.
+- The adhan times are a calculation (the country's, by the city's time zone), not a local authority's printed
+  calendar: Umm al-Qura for a place outside the Gulf, which is the project's choice. `تعديل وقت الصلاة` moves them to a mosque's minutes.
 - The UI is Arabic/RTL; the transport buttons are intentionally LTR so the previous/next arrows match
   every other player.
