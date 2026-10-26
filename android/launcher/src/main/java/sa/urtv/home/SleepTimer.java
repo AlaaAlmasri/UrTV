@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.SystemClock;
 
 import sa.urtv.home.tilawah.MusicService;
 
@@ -18,7 +19,7 @@ import sa.urtv.home.tilawah.MusicService;
  *  2. if the sleep service is on (SleepService, an accessibility service), the screen is turned off like the power key;
  *  3. otherwise the screensaver is brought up with no wake lock, so the TV's own idle timer takes over from there. Android 10 and
  *     later may refuse that from the background when another app is in front.
- * The timer does not survive a restart of the TV.
+ * The timer does not survive a restart of the TV: it is not shown after one (SleepWindow), and SleepBootReceiver forgets it.
  */
 final class SleepTimer {
     static final String ACTION = "sa.urtv.home.SLEEP_NOW";
@@ -41,7 +42,7 @@ final class SleepTimer {
         if (am == null) return;
         am.cancel(alarm(c));
         if (minutes <= 0) {
-            prefs(c).edit().remove("end").apply();
+            prefs(c).edit().remove("end").remove("since").apply();
         } else {
             long at = System.currentTimeMillis() + minutes * 60_000L;
             try {
@@ -50,7 +51,7 @@ final class SleepTimer {
             } catch (SecurityException e) {
                 am.set(AlarmManager.RTC_WAKEUP, at, alarm(c));   // exact alarms refused: a minute or so late is still the same night
             }
-            prefs(c).edit().putLong("end", at).apply();
+            prefs(c).edit().putLong("end", at).putLong("since", SystemClock.elapsedRealtime()).apply();
         }
         c.sendBroadcast(new Intent(CHANGED).setPackage(c.getPackageName()));
     }
@@ -58,7 +59,14 @@ final class SleepTimer {
     /** when it ends, in millis; 0 when no timer is running (or the TV restarted and lost it) */
     static long endsAt(Context c) {
         long end = prefs(c).getLong("end", 0);
-        return end > System.currentTimeMillis() ? end : 0;
+        return SleepWindow.running(end, System.currentTimeMillis(), prefs(c).getLong("since", 0), SystemClock.elapsedRealtime()) ? end : 0;
+    }
+
+    /** The TV has started again: no alarm survived it, so a timer saved before is forgotten and never begins late. */
+    static void forgetAfterBoot(Context c) {
+        if (prefs(c).getLong("end", 0) == 0) return;
+        prefs(c).edit().remove("end").remove("since").apply();
+        c.sendBroadcast(new Intent(CHANGED).setPackage(c.getPackageName()));
     }
 
     /** whole minutes left, rounded up; 0 when none */
@@ -69,7 +77,7 @@ final class SleepTimer {
 
     /** The alarm: the time is up. Returns what was done, for the log and for dock.sh. */
     static String fire(Context c) {
-        prefs(c).edit().remove("end").apply();
+        prefs(c).edit().remove("end").remove("since").apply();
         String done;
         try { MusicService.stopIfPlaying(c); } catch (RuntimeException ignored) { }
         if (SleepService.sleepNow()) {
