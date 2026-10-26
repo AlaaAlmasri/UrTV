@@ -2884,6 +2884,86 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
   await ctx.close();
 }
 
+// ---- the calculation of the prayers: the country's own by the zone, the Ja'fari for #pm=jafari, Umm al-Qura as it was for a Saudi city
+{
+  const method = async hash => { const { p, ctx } = await open('tv.html', hash, { now: new Date('2026-10-23T09:00:00Z') }); const m = await p.evaluate(() => CONFIG.prayerMethod); await ctx.close(); return m; };
+  const got = [await method('tz=Asia%2FRiyadh'), await method('tz=Asia%2FKuwait'), await method('tz=Asia%2FQatar'), await method('tz=Asia%2FDubai'), await method('tz=Asia%2FBahrain'),
+    await method('tz=Asia%2FMuscat'), await method('tz=Europe%2FOslo'), await method(''), await method('tz=Asia%2FKuwait&pm=jafari'), await method('pm=auto&tz=Asia%2FQatar')];
+  check('prayer method: Riyadh 4, Kuwait 9, Qatar 10, Dubai 16, Bahrain 8, Muscat 8, Oslo 4, no zone 4, #pm=jafari 0 anywhere, #pm=auto the country\'s',
+    got.join() === '4,9,10,16,8,8,4,4,0,10', got.join());
+
+  // a Saudi city keeps exactly the times it had (tests/prayer_gold.tsv is what the page computed before the Gulf methods)
+  const gold = readFileSync(path.join(ROOT, 'tests/prayer_gold.tsv'), 'utf8').split('\n').filter(l => l && !l.startsWith('#')).map(l => l.split('\t'));
+  const { p, ctx, errors } = await open('tv.html', 'tz=Asia%2FRiyadh', { now: new Date('2026-10-23T09:00:00Z') });
+  const bad = [];
+  for (const [name, date, lat, lon, , want] of gold) {
+    await p.clock.setFixedTime(new Date(date + 'T09:00:00Z'));
+    const t = await p.evaluate(([la, lo]) => { CONFIG.latitude = +la; CONFIG.longitude = +lo; const r = computePrayers(); return [r.Fajr, r.Sunrise, r.Dhuhr, r.Asr, r.Maghrib, r.Isha].join(' '); }, [lat, lon]);
+    if (t !== want) bad.push(`${name} ${date}: ${t} vs ${want}`);
+  }
+  check('Saudi cities: the page computes the same six times as before for 4 cities on 3 days (Ramadan included)', gold.length === 12 && !bad.length && !errors.length, bad.join('; ') + errors.join('; '));
+  await ctx.close();
+
+  // the Gulf cities and the Ja'fari offline (the launcher's PrayerMathRun checks the structure; these are the same numbers on the page)
+  for (const [label, hash, when, want] of [
+      ['Kuwait', 'tz=Asia%2FKuwait&lat=29.3697&lon=47.9783', '2026-10-23', '04:35 05:55 11:32 14:45 17:10 18:27'],
+      ['Doha', 'tz=Asia%2FQatar&lat=25.2854&lon=51.5310', '2026-10-23', '04:19 05:36 11:18 14:34 17:00 18:30'],
+      ['Manama', 'tz=Asia%2FBahrain&lat=26.2154&lon=50.5832', '2026-10-23', '04:17 05:41 11:22 14:37 17:03 18:33'],
+      ['Muscat', 'tz=Asia%2FMuscat&lat=23.5880&lon=58.3829', '2026-10-23', '04:45 06:07 11:51 15:08 17:34 19:04'],
+      ['Sharjah', 'tz=Asia%2FDubai&lat=25.3463&lon=55.4209', '2026-10-12', '04:58 06:12 12:08 15:28 17:57 19:11'],
+      ['Riyadh, Ja\'fari', 'tz=Asia%2FRiyadh&lat=24.6877&lon=46.7219&pm=jafari', '2026-10-23', '04:47 05:55 11:37 14:54 17:34 18:18']]) {
+    const { p, ctx, errors } = await open('tv.html', hash, { now: new Date(when + 'T09:00:00Z') });
+    const t = await p.evaluate(() => { const r = computePrayers(); return [r.Fajr, r.Sunrise, r.Dhuhr, r.Asr, r.Maghrib, r.Isha].join(' '); });
+    check(`${label}: the page computes its method's times, the same as the launcher`, t === want && !errors.length, t + ' vs ' + want + errors.join('; '));
+    await ctx.close();
+  }
+
+  // Aladhan is asked for the same method
+  for (const [label, hash, id] of [['Riyadh', 'tz=Asia%2FRiyadh', 4], ['Kuwait', 'tz=Asia%2FKuwait', 9], ['Dubai', 'tz=Asia%2FDubai', 16], ['Riyadh, Ja\'fari', 'tz=Asia%2FRiyadh&pm=jafari', 0]]) {
+    const urls = [];
+    const { p, ctx } = await open('tv.html', hash + '&panel=prayers', { now: new Date('2026-10-23T09:00:00Z'), net: r => { if (/aladhan/.test(r.request().url())) { urls.push(r.request().url()); r.abort(); return true; } return false; } });
+    await p.evaluate(() => loadPrayers());
+    check(`${label}: Aladhan is asked for method=${id}`, urls.length > 0 && urls.every(u => u.includes(`method=${id}&`)), urls.join(' '));
+    await ctx.close();
+  }
+}
+
+// ---- an Aladhan answer is used whole or not at all: plain and annotated times in, a missing, out-of-range or wrong-day field out
+{
+  const answer = (timings, date = '23-10-2026') => JSON.stringify({ code: 200, data: { timings, date: { gregorian: { date } } } });
+  const good = { Fajr: '04:30', Sunrise: '05:50', Dhuhr: '11:35', Asr: '14:50', Maghrib: '17:18', Isha: '18:48' };
+  const run = async body => {
+    const { p, ctx, errors } = await open('tv.html', 'tz=Asia%2FRiyadh&panel=prayers', { now: new Date('2026-10-23T09:00:00Z'),
+      net: r => { if (/aladhan/.test(r.request().url())) { r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body }); return true; } return false; } });
+    await p.evaluate(() => { PRAYERS = []; DAY_TIMES = null; PRAYERS_DAY = ''; });
+    await p.evaluate(() => loadPrayers());
+    const r = await p.evaluate(() => ({ day: PRAYERS_DAY, list: PRAYERS.map(x => x.h + ':' + x.mi).join(' '), finite: PRAYERS.every(x => Number.isFinite(x.h) && Number.isFinite(x.mi)), n: PRAYERS.length }));
+    await ctx.close();
+    return { ...r, errors };
+  };
+  const plain = await run(answer(good));
+  check('Aladhan answer: plain times are used', plain.day === '23-10-2026|api' && plain.list === '4:30 11:35 14:50 17:18 18:48' && plain.finite, JSON.stringify(plain));
+  const noted = await run(answer({ ...good, Fajr: '04:30 (+03)', Isha: '18:48 (AST)' }));
+  check('Aladhan answer: «04:30 (+03)» is 04:30, not NaN', noted.day === '23-10-2026|api' && noted.list === '4:30 11:35 14:50 17:18 18:48' && noted.finite, JSON.stringify(noted));
+  const midnight = await run(answer({ ...good, Maghrib: '23:50', Isha: '00:20' }));
+  check('Aladhan answer: an Isha after midnight («00:20») is kept as the absolute 24:20', midnight.list.endsWith('24:20') && midnight.finite, JSON.stringify(midnight));
+  for (const [label, body] of [['a missing Isha', answer({ ...good, Isha: undefined })], ['a non-time', answer({ ...good, Asr: 'n/a' })], ['25:00', answer({ ...good, Dhuhr: '25:00' })],
+      ['12:7', answer({ ...good, Maghrib: '12:7' })], ['the wrong day', answer(good, '22-10-2026')], ['no timings', JSON.stringify({ code: 200, data: {} })], ['not JSON', 'oops']]) {
+    const r = await run(body);
+    check(`Aladhan answer with ${label}: none of it is used, the computed times stand (all finite, five of them)`, r.day === '23-10-2026|calc' && r.n === 5 && r.finite && !r.errors.length, JSON.stringify(r));
+  }
+  // an answer that fails after good times are in does not replace them
+  const { p, ctx } = await open('tv.html', 'tz=Asia%2FRiyadh&panel=prayers', { now: new Date('2026-10-23T09:00:00Z'),
+    net: r => { if (/aladhan/.test(r.request().url())) { r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: answer({ ...good, Fajr: 'x' }) }); return true; } return false; } });
+  await p.evaluate(t => { buildPrayers(t); PRAYERS_DAY = '23-10-2026|api'; }, good);
+  await p.evaluate(() => loadPrayers());
+  const kept = await p.evaluate(() => PRAYERS.map(x => x.h + ':' + x.mi).join(' ') + ' ' + PRAYERS_DAY);
+  check("Aladhan answer: a bad answer does not replace today's good times", kept === '4:30 11:35 14:50 17:18 18:48 23-10-2026|api', kept);
+  const thrown = await p.evaluate(() => { try { buildPrayers({ Fajr: '04:30', Dhuhr: 'x:y', Asr: '14:50', Maghrib: '17:18', Isha: '18:48' }); return 'accepted'; } catch (e) { return PRAYERS.map(x => x.h).join(','); } });
+  check('buildPrayers: a field that is not a time throws and publishes nothing (the old times stay)', thrown === '4,11,14,17,18', thrown);
+  await ctx.close();
+}
+
 // ---- what the page keeps in localStorage is keyed by what it is for, and the old link-keyed copies are pruned at boot
 {
   const seed = { 'forecast:#city=old&lat=1': '[]', 'hourly:#x': '{}', 'stocks:#y': '{}', 'mk:#z': '{}', 'wx:#w': '{}',

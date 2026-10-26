@@ -24,11 +24,13 @@ final class AdhanScheduler {
     static void schedule(Context c) {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
-        am.cancel(pending(c, 0));
         cancelLegacy(c, am);
-        if (!new Prefs(c).adhanOn()) return;
-        PrayerTimes.Next next = PrayerTimes.next(c);
-        if (next == null) return;
+        if (!new Prefs(c).adhanOn()) { am.cancel(pending(c, 0)); return; }
+        // the replacement first, then the swap: an alarm is never cancelled for nothing, and a prayer that is due in the next seconds is
+        // still the one set (nextAlarm, not next: the screen's 30-second rule would skip it). Setting the same pending intent replaces
+        // the old alarm, so there is never one for the old time beside the new.
+        PrayerTimes.Next next = PrayerTimes.nextAlarm(c);
+        if (next == null) { am.cancel(pending(c, 0)); return; }
         Adhan.prefetchChosen(c);   // the recording is on the TV before its prayer, not fetched while it should be playing
         PendingIntent pending = pending(c, next.at);
         try {
@@ -69,7 +71,7 @@ final class AdhanScheduler {
     /** When the next adhan will play, 0 when it is off; printed by optimize/music.sh adhan. */
     static long scheduledAt(Context c) {
         if (!new Prefs(c).adhanOn()) return 0;
-        PrayerTimes.Next next = PrayerTimes.next(c);
+        PrayerTimes.Next next = PrayerTimes.nextAlarm(c);
         return next == null ? 0 : next.at;
     }
 }

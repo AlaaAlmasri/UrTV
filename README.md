@@ -224,7 +224,7 @@ once even when both follow it; the slot pages two a time (every 15 s, 10 s once 
 league's own file is read, so a club that is in two leagues (Abha: the Pro League and Division 1) shows only in the one it plays in this season.
 A game is always one line: when two long names do not fit side by side the pair goes one to a page.
 
-**Data** (free, no keys): Aladhan (prayer times, Umm al-Qura), Open-Meteo (weather), Yahoo and CoinGecko (markets),
+**Data** (free, no keys): Aladhan (prayer times: the city's country's method, Umm al-Qura for Saudi Arabia), Open-Meteo (weather), Yahoo and CoinGecko (markets),
 TVMaze (episodes), TheSportsDB (matches). Everything fails soft: offline, the clock, dates, prayer and Ramadan
 countdowns still work and the last good data stays on screen. A finished game's score stays up for a day.
 

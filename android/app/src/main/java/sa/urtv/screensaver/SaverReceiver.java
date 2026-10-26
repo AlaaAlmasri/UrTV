@@ -25,6 +25,7 @@ import java.util.Locale;
  *       [--es cardstyle current|dark1|glass1|dark3|glass3] [--es national auto|off]
  *       [--es markets tasi,gold,btc] [--es mkstyle arrows|prices] [--es stocks 2222,1120,AAPL]
  *       [--es leagues 'Saudi-Arabian Pro League,NBA']
+ *       [--es prayermethod jafari|auto]   («طريقة الحساب»: auto = the country's own, jafari = Shia Ithna-Ashari)
  *       [--es prayeradj on|off] [--es adj_fajr +2 --es adj_dhuhr 0 --es adj_asr 0 --es adj_maghrib -1 --es adj_isha 0]   («تعديل وقت الصلاة», minutes -20..20)
  *       [--es slot matches|weather|fasting|countdown|markets|none] [--es countdown 2026-12-01|clear --es cdname 'رحلة الصيف']
  *   am broadcast -n sa.urtv.screensaver/.SaverReceiver -a sa.urtv.screensaver.UPDATE
@@ -118,6 +119,7 @@ public class SaverReceiver extends BroadcastReceiver {
                 // a place of your own has its own time zone, and a missing one would be guessed (the TV's, Riyadh's): ask for it
                 if (tz == null && !inList(name))
                     return "error: add the time zone for a place that is not in the list, e.g. --es tz Asia/Riyadh or Asia/Kuwait";
+                if (tz == null) tz = CityMatch.zoneOf(name);   // a list name with coordinates of its own: its country's zone, not the TV's
                 city = new String[] {name, lat, lon};
             } else {
                 for (Cities.Region r : Cities.REGIONS) for (String[] x : r.cities) if (x[0].equals(name)) city = x;
@@ -171,6 +173,9 @@ public class SaverReceiver extends BroadcastReceiver {
         String prayerAdj = i.getStringExtra("prayeradj");
         if (prayerAdj != null && !"on".equals(prayerAdj) && !"off".equals(prayerAdj))
             return "error: prayeradj is one of on off";
+        String prayerMethod = i.getStringExtra("prayermethod");
+        if (prayerMethod != null && PrayerMethod.parse(prayerMethod) == null)
+            return "error: prayermethod is one of jafari auto";
         int[] adj = null;   // «تعديل وقت الصلاة»: each given prayer is a whole number of minutes, −20..20; the rest stay
         for (int k = 0; k < PrayerAdj.COUNT; k++) {
             String v = i.getStringExtra("adj_" + PrayerAdj.KEYS[k]);
@@ -272,6 +277,7 @@ public class SaverReceiver extends BroadcastReceiver {
         if (greeting != null) p.setGreeting("on".equals(greeting));
         if (adhanBar != null) p.setAdhanBar("on".equals(adhanBar));
         if (yearStrip != null) p.setYearStrip("on".equals(yearStrip));
+        if (prayerMethod != null) p.setPrayerMethod(PrayerMethod.parse(prayerMethod));
         if (adj != null) p.setPrayerAdj(adj);
         if (prayerAdj != null) p.setPrayerAdjOn("on".equals(prayerAdj));
         if (rating != null) p.setMinRating(rating);
@@ -389,6 +395,7 @@ public class SaverReceiver extends BroadcastReceiver {
             + "\ngreeting: " + (p.greeting() ? "on" : "off")
             + "\nadhanbar: " + (p.adhanBar() ? "on" : "off")
             + "\nyearstrip: " + (p.yearStrip() ? "on" : "off")
+            + "\nprayermethod: " + p.prayerMethod()
             + "\nprayeradj: " + (p.prayerAdjOn() ? "on" : "off") + " " + PrayerAdj.describe(p.prayerAdj())
             + "\nminrating: " + p.minRating()
             + "\nphotos: " + p.photoMinutes()

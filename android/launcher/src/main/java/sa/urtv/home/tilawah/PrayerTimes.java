@@ -16,10 +16,10 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * Prayer times for the TV: Umm al-Qura, the same numbers the screensaver's page computes and the
- * ones Aladhan calls method 4. Everything is computed on the TV with no network; once a day the
- * times are quietly replaced by Aladhan's, and Isha stays 90 minutes after Maghrib (120 in Ramadan)
- * like the Umm al-Qura calendar.
+ * Prayer times for the TV: the calculation of the city's country (Umm al-Qura for Saudi Arabia, and for anywhere outside the Gulf;
+ * see PrayerMath.Method) or the Ja'fari one when the settings ask, the same numbers the screensaver's page computes and the ones
+ * Aladhan gives for that method. Everything is computed on the TV with no network; once a day the times are quietly replaced by
+ * Aladhan's. Where a method fixes Isha as a delay after Maghrib (Umm al-Qura: 90 minutes, 120 in Ramadan) Isha stays ours.
  */
 final class PrayerTimes {
     static final int FAJR = 0, SUNRISE = 1, DHUHR = 2, ASR = 3, MAGHRIB = 4, ISHA = 5;
@@ -32,7 +32,7 @@ final class PrayerTimes {
     final String[] clock = new String[6];
     /** the city's zone these times belong to, local midnight of their day, and whether it is Ramadan */
     private String tz = "Asia/Riyadh";
-    private long day0;
+    private int year, month, day, method = PrayerMath.UMM_AL_QURA;
     private boolean ramadan;
     /** «تعديل وقت الصلاة»: minutes added to PRAYERS[k] (PrayerAdjust); the sunrise is never moved */
     private int[] adj = new int[PrayerAdjust.COUNT];
@@ -58,11 +58,14 @@ final class PrayerTimes {
 
     private static PrayerTimes of(Calendar local, Place place, boolean ramadan) {
         long[] times = PrayerMath.compute(local.get(Calendar.YEAR), local.get(Calendar.MONTH) + 1,
-                local.get(Calendar.DAY_OF_MONTH), place.lat, place.lng, place.tz, ramadan);
+                local.get(Calendar.DAY_OF_MONTH), place.lat, place.lng, place.tz, ramadan, place.method);
         PrayerTimes t = new PrayerTimes();
         t.tz = place.tz;
         t.ramadan = ramadan;
-        t.day0 = PrayerMath.midnight(local.get(Calendar.YEAR), local.get(Calendar.MONTH) + 1, local.get(Calendar.DAY_OF_MONTH), place.tz);
+        t.method = place.method;
+        t.year = local.get(Calendar.YEAR);
+        t.month = local.get(Calendar.MONTH) + 1;
+        t.day = local.get(Calendar.DAY_OF_MONTH);
         for (int i = 0; i < 6; i++) t.set(i, times[i]);
         t.adj = place.adj;
         t.shift();
@@ -106,16 +109,20 @@ final class PrayerTimes {
 
     private static synchronized void forgetToday() { todayCopy = null; todayKey = null; }
 
-    /** The next of the five prayers, looking at tomorrow when today's Isha has passed. */
-    static Next next(Context c) {
+    /** The next of the five prayers to show, looking at tomorrow when today's Isha has passed. One 20 seconds away is already «الآن». */
+    static Next next(Context c) { return next(c, 30_000); }
+
+    /** The next prayer the adhan alarm is for: one still due even a second from now, so a refresh just before it keeps it. */
+    static Next nextAlarm(Context c) { return next(c, 0); }
+
+    private static Next next(Context c, long aheadMs) {
         long now = System.currentTimeMillis();
         Place place = Place.get(c);
         Calendar day = Calendar.getInstance(TimeZone.getTimeZone(place.tz), Locale.US);
         for (int d = 0; d < 3; d++) {
-            PrayerTimes t = d == 0 ? today(c) : of(day, place);
-            for (int i : PRAYERS) {
-                if (t.at[i] > now + 30_000) return new Next(i, t.at[i], t.clock[i]);
-            }
+            PrayerTimes t = d == 0 ? today(c, place) : of(day, place);
+            int i = PrayerMath.firstAfter(t.at, PRAYERS, now + aheadMs);
+            if (i >= 0) return new Next(i, t.at[i], t.clock[i]);
             day.add(Calendar.DAY_OF_MONTH, 1);
         }
         return null;
@@ -156,13 +163,27 @@ final class PrayerTimes {
     // ---------------------------------------------------------------- Aladhan
 
     /**
-     * Replaces today's computed times with Aladhan's (method 4) once they arrive, and puts the alarm back for the
+     * Replaces today's computed times with Aladhan's (the place's method) once they arrive, and puts the alarm back for the
      * new times. Runs off the main thread; `done` runs on the main thread when something changed.
      */
     static void refresh(final Context c, final Runnable done) {
         new Thread(() -> {
             if (refreshNow(c) && done != null) new android.os.Handler(android.os.Looper.getMainLooper()).post(done);
         }, "adhan-times").start();
+    }
+
+    /**
+     * The home screen's minute tick asks for today's times from Aladhan like the page does, so the two agree to the minute: at most one
+     * try in 30 minutes while it has not worked, none once today's are kept (the answer is on disk, no thread, no network).
+     */
+    static void refreshIfDue(Context c, Place place) {
+        Calendar day = Calendar.getInstance(TimeZone.getTimeZone(place.tz), Locale.US);
+        String key = key(day, place);
+        SharedPreferences sp = prefs(c);
+        long now = System.currentTimeMillis();
+        if (sp.getBoolean("fetched_" + key, false) || now - sp.getLong("refresh_try", 0) < 30 * 60_000L) return;
+        sp.edit().putLong("refresh_try", now).apply();
+        refresh(c, null);
     }
 
     /** The same, on the caller's thread (which must not be the main one). True when new times were kept. */
@@ -174,7 +195,7 @@ final class PrayerTimes {
         try {
             String url = "https://api.aladhan.com/v1/timings/" + PrayerMath.aladhanDate(day.getTimeInMillis(), place.tz)
                     + "?latitude=" + place.lat + "&longitude=" + place.lng
-                    + "&method=4&timezonestring=" + URLEncoder.encode(place.tz, "UTF-8");
+                    + "&method=" + place.method + "&timezonestring=" + URLEncoder.encode(place.tz, "UTF-8");
             HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
             con.setConnectTimeout(6000);
             con.setReadTimeout(8000);
@@ -189,7 +210,8 @@ final class PrayerTimes {
             }
             JSONObject timings = new JSONObject(body.toString()).getJSONObject("data").getJSONObject("timings");
             StringBuilder out = new StringBuilder();
-            for (int i = 0; i <= MAGHRIB; i++) {   // Isha stays ours: 90/120 minutes after Maghrib
+            // Isha stays ours where the method fixes it as a delay after Maghrib (90/120 minutes); an angle's Isha is Aladhan's, the sixth
+            for (int i = 0; i <= (PrayerMath.method(place.method).ishaIsDelay() ? MAGHRIB : ISHA); i++) {
                 int[] hm = PrayerMath.parseClock(timings.optString(KEYS[i]));   // «5:12 (+03)» is 5:12
                 if (hm == null) throw new IllegalStateException("no " + KEYS[i]);
                 if (out.length() > 0) out.append(',');
@@ -209,18 +231,25 @@ final class PrayerTimes {
         }
     }
 
-    /** Aladhan's five times, "HH:mm,..." as saved; Isha is Maghrib's moment plus its delay, never wrapped into the day. */
+    /**
+     * Aladhan's times, "HH:mm,..." as saved: Fajr to Maghrib, and for a method whose Isha is an angle the Isha too. Otherwise Isha is
+     * Maghrib's moment plus its delay, never wrapped into the day. Each is the city's clock reading of the day, taken as the moment it
+     * is in the city's zone (also on a day the clocks change).
+     */
     private void apply(String saved) {
         String[] values = saved.split(",");
-        if (values.length < MAGHRIB + 1) return;
-        long[] parsed = new long[MAGHRIB + 1];
-        for (int i = 0; i <= MAGHRIB; i++) {
+        boolean delay = PrayerMath.method(method).ishaIsDelay();
+        int count = delay ? MAGHRIB + 1 : ISHA + 1;
+        if (values.length < count) return;
+        long[] parsed = new long[6];
+        for (int i = 0; i < count; i++) {
             int[] hm = PrayerMath.parseClock(values[i]);
             if (hm == null) return;   // not a time: keep the computed ones
-            parsed[i] = day0 + (hm[0] * 60 + hm[1]) * 60_000L;
+            parsed[i] = PrayerMath.wall(year, month, day, hm[0] * 60 + hm[1], tz);
         }
-        for (int i = 0; i <= MAGHRIB; i++) set(i, parsed[i]);
-        set(ISHA, parsed[MAGHRIB] + PrayerMath.ishaDelayMillis(ramadan));
+        if (delay) parsed[ISHA] = parsed[MAGHRIB] + PrayerMath.ishaDelayMillis(ramadan, method);
+        else if (parsed[ISHA] < parsed[MAGHRIB]) parsed[ISHA] += 24 * 3600_000L;   // «00:10»: after midnight, the next day's
+        for (int i = 0; i <= ISHA; i++) set(i, parsed[i]);
         shift();   // Aladhan's times are the raw ones: the person's minutes go on top of them
     }
 
@@ -253,6 +282,6 @@ final class PrayerTimes {
 
     /** The day's key in the city's zone and for that city: a new city the same day asks Aladhan again. */
     private static String key(Calendar day, Place place) {
-        return PrayerMath.key(day.getTimeInMillis(), place.lat, place.lng, place.tz);
+        return PrayerMath.key(day.getTimeInMillis(), place.lat, place.lng, place.tz, place.method);
     }
 }

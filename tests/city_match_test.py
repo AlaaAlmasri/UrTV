@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "android/app/src/main/java/sa/urtv/screensaver"
-NAMES = re.findall(r'\{"([^"]+)", "[\d.-]+", "[\d.-]+"\}', (SRC / "Cities.java").read_text(encoding="utf-8"))
+NAMES = re.findall(r'\{"([^"]+)", "[\d.-]+", "[\d.-]+"(?:, "[A-Za-z/]+")?\}', (SRC / "Cities.java").read_text(encoding="utf-8"))
 
 # typed -> the names it must find (all of them, in the list's order)
 CASES = [
@@ -20,10 +20,11 @@ CASES = [
     ("المنورة", ["المدينة المنورة"]), ("منوره", ["المدينة المنورة"]),
     ("رياض", ["الرياض"]), ("الرياض", ["الرياض"]),            # the same name wins over «رياض الخبراء»
     ("ليلى", ["ليلى (الأفلاج)"]), ("ليلى الأفلاج", ["ليلى (الأفلاج)"]),
-    ("تنورة", ["رأس تنورة"]), ("راس تنوره", ["رأس تنورة"]), ("رأس", ["رأس تنورة", "رأس الخير"]),
+    ("تنورة", ["رأس تنورة"]), ("راس تنوره", ["رأس تنورة"]), ("رأس", ["رأس تنورة", "رأس الخير", "رأس الخيمة"]),
     ("حوطة", ["حوطة بني تميم", "حوطة سدير"]), ("بني تميم", ["حوطة بني تميم"]),
     ("وادي", ["وادي الدواسر", "وادي الفرع", "وادي النخيل"]),
     ("خرج", ["الخرج"]), ("الخرج", ["الخرج"]),
+    ("الدوحة", ["الدوحة"]), ("مسقط", ["مسقط"]), ("دبي", ["دبي"]), ("المنامة", ["المنامة"]), ("مدينة الكويت", ["مدينة الكويت"]), ("الكويت", ["مدينة الكويت"]),
     ("", []), ("ر", []), ("zzz", []), ("مدينة", None),         # None: only that it finds several
 ]
 
@@ -51,7 +52,13 @@ with tempfile.TemporaryDirectory() as tmp:
         r = subprocess.run([java, "-cp", str(tmp), "sa.urtv.screensaver.CityMatchRun", str(tmp / "queries.txt")], capture_output=True)
         lines = r.stdout.decode("utf-8").split("\n")
         check("CityMatch.java runs", r.returncode == 0 and len(lines) > len(queries), r.stderr.decode()[-600:])
+        cut = lines.index("--")
         got = [l.split("|") if l else [] for l in lines[:len(queries)]]
+        zones = lines[cut + 1:cut + 1 + len(queries)]
+        # the zone follows the city: a list name given with coordinates of its own (and no zone) takes its country's, never the TV's
+        for q, want in [("الرياض", "Asia/Riyadh"), ("مكة", "Asia/Riyadh"), ("الدوحة", "Asia/Qatar"), ("المنامة", "Asia/Bahrain"), ("مدينة الكويت", "Asia/Kuwait"),
+                        ("الكويت", "Asia/Kuwait"), ("دبي", "Asia/Dubai"), ("مسقط", "Asia/Muscat"), ("zzz", "-"), ("رأس", "-")]:
+            check(f"zone of {q!r} is {want}", zones[queries.index(q)] == want if q in queries else False, zones[queries.index(q)] if q in queries else "not queried")
         for (q, want), hit in zip(CASES, got):
             ok = len(hit) > 1 if want is None else hit == want
             check(f"{q!r} -> {want if want is not None else 'several'}", ok, hit)

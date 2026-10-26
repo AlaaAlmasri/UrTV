@@ -81,6 +81,34 @@ EXTRA = [
     ("20", "دومة الجندل", 29.8115, 39.8687), ("20", "القريات", 31.3317, 37.3428),
 ]
 
+# The other Gulf states (hand-checked coordinates, not from the dataset): country, IANA zone, then the capital and the big cities.
+# The zone is what picks the calculation (PrayerMethod in the app, PrayerMath in the launcher, CONFIG.prayerMethod in the page).
+GCC = [
+    ("البحرين", "Asia/Bahrain", [
+        ("المنامة", 26.2154, 50.5832), ("المحرق", 26.2572, 50.6119), ("الرفاع", 26.1300, 50.5550),
+        ("مدينة حمد", 26.1153, 50.5069), ("مدينة عيسى", 26.1736, 50.5478), ("سترة", 26.1547, 50.6208),
+        ("الحد", 26.2386, 50.6522), ("البديع", 26.2167, 50.4500)]),
+    ("الكويت", "Asia/Kuwait", [
+        ("مدينة الكويت", 29.3697, 47.9783), ("حولي", 29.3328, 48.0286), ("السالمية", 29.3339, 48.0761),
+        ("الفروانية", 29.2775, 47.9586), ("الجهراء", 29.3375, 47.6581), ("الأحمدي", 29.0769, 48.0839),
+        ("الفحيحيل", 29.0833, 48.1303), ("الصباحية", 29.1278, 48.0861)]),
+    ("قطر", "Asia/Qatar", [
+        ("الدوحة", 25.2854, 51.5310), ("الريان", 25.2919, 51.4244), ("الوكرة", 25.1715, 51.6034),
+        ("الخور", 25.6804, 51.4969), ("أم صلال", 25.4161, 51.4036), ("لوسيل", 25.4222, 51.4910),
+        ("الشمال", 26.1200, 51.2000), ("دخان", 25.4294, 50.7810), ("مسيعيد", 24.9908, 51.5483)]),
+    ("الإمارات", "Asia/Dubai", [
+        ("دبي", 25.2048, 55.2708), ("أبوظبي", 24.4539, 54.3773), ("الشارقة", 25.3463, 55.4209),
+        ("عجمان", 25.4052, 55.5136), ("العين", 24.2075, 55.7447), ("رأس الخيمة", 25.7895, 55.9432),
+        ("الفجيرة", 25.1288, 56.3265), ("أم القيوين", 25.5647, 55.5552), ("خورفكان", 25.3395, 56.3563),
+        ("كلباء", 25.0583, 56.3500), ("ليوا", 23.1167, 53.7667)]),
+    ("سلطنة عُمان", "Asia/Muscat", [
+        ("مسقط", 23.5880, 58.3829), ("صلالة", 17.0151, 54.0924), ("صحار", 24.3417, 56.7299),
+        ("نزوى", 22.9333, 57.5333), ("صور", 22.5667, 59.5289), ("البريمي", 24.2500, 55.7928),
+        ("الرستاق", 23.3908, 57.4244), ("عبري", 23.2257, 56.5157), ("السيب", 23.6702, 58.1891),
+        ("بركاء", 23.6833, 57.8833), ("بهلاء", 22.9667, 57.3000), ("إبراء", 22.6911, 58.5336),
+        ("مطرح", 23.6133, 58.5683), ("خصب", 26.1792, 56.2472), ("الدقم", 19.6667, 57.7167)]),
+]
+
 
 def main(path):
     data = json.load(open(path, encoding="utf-8"))
@@ -105,6 +133,9 @@ def main(path):
         cities = sorted(by_region[code].items(), key=lambda kv: -kv[1][0])
         items = ",\n".join(f'            {{"{n}", "{lat:.4f}", "{lon:.4f}"}}' for n, (_, lat, lon) in cities)
         rows.append(f'        new Region("{rname}", new String[][] {{\n{items}\n        }})')
+    for rname, tz, cities in GCC:   # the fourth field is the zone: the Saudi ones have none (Asia/Riyadh)
+        items = ",\n".join(f'            {{"{n}", "{lat:.4f}", "{lon:.4f}", "{tz}"}}' for n, lat, lon in cities)
+        rows.append(f'        new Region("{rname}", new String[][] {{\n{items}\n        }})')
     body = ",\n".join(rows)
     out = Path(__file__).resolve().parents[2] / "android/app/src/main/java/sa/urtv/screensaver/Cities.java"
     out.write_text(f"""package sa.urtv.screensaver;
@@ -113,7 +144,7 @@ def main(path):
 final class Cities {{
     static final class Region {{
         final String name;
-        final String[][] cities;   // name, latitude, longitude
+        final String[][] cities;   // name, latitude, longitude[, time zone: only outside Saudi Arabia]
         Region(String name, String[][] cities) {{ this.name = name; this.cities = cities; }}
     }}
 
@@ -124,7 +155,7 @@ final class Cities {{
     private Cities() {{}}
 }}
 """, encoding="utf-8")
-    print(f"{sum(len(v) for v in by_region.values())} cities in {len(REGIONS)} regions -> {out.name}")
+    print(f"{sum(len(v) for v in by_region.values()) + sum(len(c) for _, _, c in GCC)} cities in {len(REGIONS) + len(GCC)} regions -> {out.name}")
 
 
 if __name__ == "__main__":
