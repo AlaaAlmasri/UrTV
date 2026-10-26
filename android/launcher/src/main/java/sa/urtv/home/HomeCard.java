@@ -9,6 +9,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -52,6 +53,8 @@ final class HomeCard {
     private View target;
     private FrameLayout.LayoutParams targetParams;
     private final Live live;
+    private final RenderGuard guard = new RenderGuard();
+    private boolean resumed;
 
     HomeCard(Activity activity, ViewGroup parent, FrameLayout.LayoutParams params, Sizer sizer, Live live) {
         this.activity = activity;
@@ -77,15 +80,21 @@ final class HomeCard {
 
     /** onResume: follow the current settings; a changed choice gets a fresh page. */
     void refresh() {
+        resumed = true;
         String want = readUrl();
         if (want == null) { destroy(); return; }
-        if (!want.equals(url)) { destroy(); create(want); }
+        if (!want.equals(url)) {
+            destroy();
+            if (!guard.mayCreate(System.currentTimeMillis())) return;   // its renderer keeps dying: the cards stay off for now
+            create(want);
+        }
         web.onResume();
         web.resumeTimers();
     }
 
     /** onPause: no timers or network while an app is in front. */
     void pause() {
+        resumed = false;
         if (web != null) { web.onPause(); web.pauseTimers(); }
     }
 
@@ -134,6 +143,16 @@ final class HomeCard {
         web.setHorizontalScrollBarEnabled(false);
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
         web.setWebViewClient(new WebViewClient() {
+            /** The renderer died or was killed for memory: the dead view is thrown away (never reloaded) and, if the home screen is in front, made again at most twice in ten minutes. */
+            @Override
+            public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail detail) {
+                if (v != web) { v.destroy(); return true; }
+                guard.gone(System.currentTimeMillis());
+                destroy();
+                if (resumed) refresh();
+                return true;
+            }
+
             // the page asks GitHub for its fonts; answer from the APK
             @Override
             public void onPageFinished(WebView v, String u) {

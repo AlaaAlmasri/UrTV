@@ -17,6 +17,8 @@ final class AdhanScheduler {
     private static final String LEGACY_ACTION = "sa.urtv.home.ADHAN";
     /** the prayer time this alarm is for, so a repeated alarm for the same prayer is recognised */
     static final String EXTRA_DUE = "due";
+    /** which prayer it is for (PrayerTimes.FAJR…): Fajr has a muezzin of its own */
+    static final String EXTRA_PRAYER = "prayer";
     private static final int REQUEST = 47;
 
     private AdhanScheduler() {}
@@ -25,14 +27,14 @@ final class AdhanScheduler {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
         cancelLegacy(c, am);
-        if (!new Prefs(c).adhanOn()) { am.cancel(pending(c, 0)); return; }
+        if (!new Prefs(c).adhanOn()) { am.cancel(pending(c, 0, -1)); return; }
         // the replacement first, then the swap: an alarm is never cancelled for nothing, and a prayer that is due in the next seconds is
         // still the one set (nextAlarm, not next: the screen's 30-second rule would skip it). Setting the same pending intent replaces
         // the old alarm, so there is never one for the old time beside the new.
         PrayerTimes.Next next = PrayerTimes.nextAlarm(c);
-        if (next == null) { am.cancel(pending(c, 0)); return; }
+        if (next == null) { am.cancel(pending(c, 0, -1)); return; }
         Adhan.prefetchChosen(c);   // the recording is on the TV before its prayer, not fetched while it should be playing
-        PendingIntent pending = pending(c, next.at);
+        PendingIntent pending = pending(c, next.at, next.index);
         try {
             if (!exactAllowed(c)) {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.at, pending);   // may be late: see exactAllowed
@@ -61,8 +63,8 @@ final class AdhanScheduler {
         if (old != null) am.cancel(old);
     }
 
-    private static PendingIntent pending(Context c, long due) {
-        Intent intent = new Intent(c, AdhanReceiver.class).setAction(ACTION).putExtra(EXTRA_DUE, due);
+    private static PendingIntent pending(Context c, long due, int prayer) {
+        Intent intent = new Intent(c, AdhanReceiver.class).setAction(ACTION).putExtra(EXTRA_DUE, due).putExtra(EXTRA_PRAYER, prayer);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
         return PendingIntent.getBroadcast(c, REQUEST, intent, flags);

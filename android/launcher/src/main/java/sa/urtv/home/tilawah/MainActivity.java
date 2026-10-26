@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
     private static final int TAB_RECITERS = 0, TAB_STATIONS = 1, TAB_ADHAN = 2;
 
     private static final int KIND_RESUME = 0, KIND_RECITER = 1, KIND_STATION = 2,
-            KIND_PRAYER = 3, KIND_ADHAN_TOGGLE = 4, KIND_VOICE = 5, KIND_VOLUME = 6, KIND_EXACT = 7;
+            KIND_PRAYER = 3, KIND_ADHAN_TOGGLE = 4, KIND_VOICE = 5, KIND_VOLUME = 6, KIND_EXACT = 7, KIND_FAJR_VOICE = 8, KIND_SHORT = 9;
 
     private Catalog cat;
     private Prefs prefs;
@@ -88,7 +88,8 @@ public class MainActivity extends Activity {
                 MusicService.playRadio(this, row.index);
                 openPlayer();
             } else if (row.kind == KIND_PRAYER) {
-                MusicService.adhan(this, prefs.playVoice(this), Adhan.name(prefs.playVoice(this)), 0);
+                int voice = prefs.playVoiceFor(this, row.index == PrayerTimes.FAJR);   // Fajr has its own muezzin
+                MusicService.adhan(this, voice, Adhan.name(voice), 0);
                 openPlayer();
             } else if (row.kind == KIND_ADHAN_TOGGLE) {
                 prefs.setAdhanOn(!prefs.adhanOn());
@@ -97,6 +98,12 @@ public class MainActivity extends Activity {
                 focusList(list.getSelectedItemPosition());
             } else if (row.kind == KIND_VOICE) {
                 startActivity(new Intent(this, AdhanActivity.class));
+            } else if (row.kind == KIND_FAJR_VOICE) {
+                startActivity(new Intent(this, AdhanActivity.class).putExtra(AdhanActivity.EXTRA_FAJR, true));
+            } else if (row.kind == KIND_SHORT) {
+                prefs.setAdhanShort(!prefs.adhanShort());
+                adapter.rebuild();
+                focusList(list.getSelectedItemPosition());
             } else if (row.kind == KIND_EXACT) {
                 openExactAlarmSettings();
             }   // «صوت الأذان» is set with left/right (changeVolume); OK on it does nothing
@@ -360,6 +367,9 @@ public class MainActivity extends Activity {
                     rows.add(new Row(false, KIND_EXACT, getString(R.string.adhan_exact_title), getString(R.string.adhan_exact_detail), -1));
                 }
                 rows.add(new Row(false, KIND_VOICE, getString(R.string.adhan_voice), Adhan.label(prefs.playVoice(MainActivity.this)), -1));
+                rows.add(new Row(false, KIND_FAJR_VOICE, getString(R.string.adhan_fajr_voice), Adhan.label(prefs.playFajrVoice(MainActivity.this)), -1));
+                rows.add(new Row(false, KIND_SHORT, getString(R.string.adhan_short),
+                        getString(prefs.adhanShort() ? R.string.adhan_short_on : R.string.adhan_short_off), -1));
                 rows.add(new Row(false, KIND_VOLUME, getString(R.string.adhan_volume),
                         volumeText(prefs.adhanVolume()), -1));
             }

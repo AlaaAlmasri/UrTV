@@ -47,10 +47,15 @@ python3 tests/community_test.py
 python3 tests/reset_screensaver_test.py
 python3 tests/reset_tweaks_test.py
 python3 tests/task_voice_test.py
+python3 tests/task_ids_test.py
+python3 tests/render_gone_test.py
+python3 tests/sleep_boot_test.py
 python3 tests/photo_prep_test.py
 python3 tests/photos_sh_test.py
 python3 tests/music_adhan_own_test.py
 python3 tests/own_adhan_test.py
+python3 tests/own_adhan_keep_test.py
+python3 tests/player_logic_test.py
 python3 tests/pill_text_test.py
 python3 tests/tasks_card_test.py
 python3 tests/now_playing_test.py

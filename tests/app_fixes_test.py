@@ -16,7 +16,7 @@ text = lambda p: p.read_text(encoding="utf-8")
 prefs = text(APP / "Prefs.java")
 body = prefs[prefs.index("static List<Task> parseTasks"):prefs.index("private void setTasks")]
 check("Prefs.tasks: one entry that is not a task is skipped, inside the loop", body.index("try {", body.index("for (int k")) < body.index("out.add(new Task(") and "catch (JSONException bad)" in body)
-check("Prefs.tasks: parsed by a static method that takes the JSON", "List<Task> tasks() { return parseTasks(" in prefs)
+check("Prefs.tasks: parsed by a static method that takes the JSON", "parseTasks(sp.getString(\"tasks\"" in prefs)
 updater = text(APP / "Updater.java")
 check("Updater compares (major, minor), not the minor alone", "Versions.compare(latest, mine)" in updater and "minor(" not in updater)
 cache = text(APP / "PhotoCache.java")

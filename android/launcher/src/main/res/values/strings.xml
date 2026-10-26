@@ -41,6 +41,11 @@
     <string name="adhan_off">متوقف</string>
     <string name="adhan_voice">المؤذن</string>
     <string name="adhan_voices">اختر المؤذن</string>
+    <string name="adhan_fajr_voice">مؤذن الفجر</string>
+    <string name="adhan_fajr_voices">اختر مؤذن الفجر</string>
+    <string name="adhan_short">أذان مختصر</string>
+    <string name="adhan_short_on">مفعّل  •  يتوقف بعد دقيقة</string>
+    <string name="adhan_short_off">متوقف  •  الأذان كاملًا</string>
     <string name="adhan_volume">صوت الأذان</string>
     <string name="adhan_exact_title">قد يتأخر الأذان دقائق</string>
     <string name="adhan_exact_detail">فعّل المنبّهات الدقيقة  •  اختيار يفتح الإعداد</string>

@@ -607,7 +607,10 @@ public class SettingsActivity extends Activity {
             int hash = u.indexOf('#');
             u = hash < 0 ? u + "?p=" + (++loads[0]) : u.substring(0, hash) + "?p=" + (++loads[0]) + u.substring(hash);
             if (web[0] == null) {
-                web[0] = ScreenView.createPreview(SettingsActivity.this, u);
+                web[0] = ScreenView.createPreview(SettingsActivity.this, u, dead -> {   // its renderer died: the card goes blank, nothing is made again
+                    ScreenView.release(dead);
+                    if (web[0] == dead) { web[0] = null; shown[0] = -1; }
+                });
                 FrameLayout.LayoutParams wp = new FrameLayout.LayoutParams(-1, dp(viewH));   // the page's own box: a fixed one, the card is at its top
                 wp.topMargin = dp(pad);
                 wp.leftMargin = wp.rightMargin = dp(pad);

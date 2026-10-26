@@ -16,6 +16,23 @@ final class NowPlayingText {
     /** who recites: the reciter, or «بث مباشر» for a station */
     static String who(boolean radio, String reciter) { return radio ? "بث مباشر" : reciter; }
 
+    /** what the second line says instead of «يُتلى الآن» while the sound is loading */
+    static final String BUFFERING = "جارٍ التحميل…";
+
+    /**
+     * The same with a note in front of «يُتلى الآن» when something is wrong or slow: «جارٍ التحميل…  ·  عبدالرحمن السديس» while it loads,
+     * or what failed («تعذّر تحميل السورة، تحقق من الإنترنت  ·  …»). An empty note is the plain line.
+     */
+    static String sub(boolean radio, String reciter, int sleepMinutes, String note) {
+        String plain = sub(radio, reciter, sleepMinutes);
+        return note == null || note.isEmpty() ? plain : plain.replaceFirst("^يُتلى الآن", java.util.regex.Matcher.quoteReplacement(note));
+    }
+
+    /** the note: what failed first, else that it is loading, else none */
+    static String note(String error, boolean buffering) {
+        return error != null && !error.isEmpty() ? error : buffering ? BUFFERING : "";
+    }
+
     /** «يُتلى الآن · عبدالرحمن السديس», «يُتلى الآن · بث مباشر»; with a sleep timer set: «… · نوم ٢٣ د» (minutes left, 0 = none) */
     static String sub(boolean radio, String reciter, int sleepMinutes) {
         String s = "يُتلى الآن  ·  " + (radio ? "بث مباشر" : reciter);
