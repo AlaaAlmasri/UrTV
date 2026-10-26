@@ -35,6 +35,7 @@ python3 tests/saver_tasks_test.py
 python3 tests/saver_quote_test.py
 python3 tests/saver_off_test.py
 python3 tests/versions_test.py
+python3 tests/channel_test.py
 python3 tests/app_fixes_test.py
 python3 tests/keep_test.py
 python3 tests/keep_restore_test.py
