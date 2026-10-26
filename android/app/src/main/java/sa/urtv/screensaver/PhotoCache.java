@@ -27,7 +27,8 @@ final class PhotoCache {
     private PhotoCache() {}
 
     /** null lets the WebView load the URL itself */
-    static WebResourceResponse serve(Context c, String url) {
+    static WebResourceResponse serve(Context c, String requested) {
+        String url = Channel.own(requested, REPO);   // a next build gets the page's master URLs too
         try {
             if (url.startsWith(FONTS)) {
                 String name = url.substring(FONTS.length());

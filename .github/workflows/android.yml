@@ -10,7 +10,16 @@ permissions:
   contents: write
 
 jobs:
+  # master publishes to apk-latest, which every installed TV updates from: the same checks as checks.yml must pass first.
+  # next builds without waiting (apk-next is a test build); a skipped checks job counts as passed there.
+  checks:
+    if: github.ref_name == 'master'
+    uses: ./.github/workflows/checks.yml
+    secrets: inherit
+
   apk:
+    needs: checks
+    if: ${{ !cancelled() && (needs.checks.result == 'success' || needs.checks.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +71,7 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk urtv-screensaver.apk
           cp android/launcher/build/outputs/apk/release/launcher-release.apk urtv-home.apk
+          echo "3.${{ github.run_number }}" > version.txt   # the installed app reads the newest version from here: /releases/latest ends in apk-latest, not in a number
 
       # apksigner, not keytool: the home APK has no v1 (JAR) signature, so keytool sees no signer in it
       - name: Which key signed them
@@ -89,6 +99,7 @@ jobs:
           files: |
             urtv-screensaver.apk
             urtv-home.apk
+            version.txt
           make_latest: true
 
       # and every build kept under its own number, the apps' version: APK_TAG=v3.N optimize/install.sh all

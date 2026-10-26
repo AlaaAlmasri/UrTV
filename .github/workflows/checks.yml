@@ -7,6 +7,7 @@ on:
     branches: [master, next, content]
   pull_request:
   workflow_dispatch:
+  workflow_call:   # android.yml runs it before publishing to apk-latest
 
 jobs:
   checks:

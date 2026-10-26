@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- the build: UTC time (YYYYMMDDHHMMSS) of the newest commit of the page's sources, put in by src/build.py. The app loads the page with the newer stamp (its own
      copy or a downloaded one), never by file time, and does not keep a download whose stamp is older than its own (Updater, PageStamp). -->
-<meta name="urtv-build" content="20261023193544">
+<meta name="urtv-build" content="20261026033246">
 <title>شاشة تلفزيونك</title>
 <style>
   @font-face{font-family:'Thmanyah';font-weight:300;font-style:normal;font-display:block;src:url("https://raw.githubusercontent.com/tshi-dev/UrTV/master/assets/fonts/Thmanyah-Light.woff2") format("woff2")}
@@ -1095,7 +1095,10 @@ const JITTER_MS = (()=>{
     return v * 60000;
   }catch(e){ return 0; }
 })();
-const periodic = (fn, ms) => setTimeout(() => { fn(); setInterval(fn, ms); }, ms + JITTER_MS);   // the first periodic run is late by the offset
+// the offset never exceeds the task's own period: a 2-minute task starts within 2 minutes of its period, a 30-minute or slower one
+// keeps the whole 0-29 (scaled, so TVs stay spread over the period)
+const spread = ms => Math.floor(JITTER_MS * Math.min(ms, 30*60000) / (30*60000));
+const periodic = (fn, ms) => setTimeout(() => { fn(); setInterval(fn, ms); }, ms + spread(ms));   // the first periodic run is late by the offset
 const later = fn => setTimeout(fn, JITTER_MS);   // the same offset for the refresh at midnight
 const fmtAgo = ms => { const p = riyadhParts(new Date(ms)); return 'آخر تحديث ' + fmt12(p.h, p.mi); };
 
@@ -1675,6 +1678,7 @@ const loadMatches = guarded('matches', async function(){
   renderMatches();
   renderPanel(false, 'matches');
   loadCrests();
+  loadLive();   // a game already under way gets its score now, not at the next 2-minute tick
   if(CONFIG.events.length) await loadEvents();   // the other sports, after the games, one league at a time
 });
 
@@ -1856,10 +1860,17 @@ function paintMkUp(){
   setText(up, stale.length ? staleMark(stale[0]) : fmtAgo(Math.max(...known.map(t => MK_LAST[t.key].at || 0))));
 }
 
+// The deadline covers the answer's headers and its body: the timer stops when the body has been read (or the request failed),
+// so a server that sends headers and then stalls ends in an error like a slow one. The answer has what the callers use:
+// ok, status, json(), text(), blob().
 async function fetchT(url, ms){
   const c = new AbortController(); const id = setTimeout(()=>c.abort(), ms||12000);
-  try{ return await fetch(url,{cache:'no-store', signal:c.signal}); }
-  finally{ clearTimeout(id); }
+  let r;
+  try{ r = await fetch(url,{cache:'no-store', signal:c.signal}); }
+  catch(e){ clearTimeout(id); throw e; }
+  if(!r.ok) clearTimeout(id);   // nobody reads the body of an error
+  const body = kind => async () => { try{ return await r[kind](); }finally{ clearTimeout(id); } };
+  return {ok:r.ok, status:r.status, json:body('json'), text:body('text'), blob:body('blob')};
 }
 
 // ---- prices. First the file CI keeps (.github/tools/market_prices.py, branch data-markets): one download holds every market and the

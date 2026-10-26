@@ -10,8 +10,6 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /** Pulls the latest page from GitHub so screen changes reach the TV without a new APK. */
 final class Updater {
@@ -22,7 +20,7 @@ final class Updater {
     private static final String OFF = "التحديث التلقائي متوقف";
     private static final String RECENT = "تم الفحص مؤخراً";
     private static final String LATEST_URL = "https://github.com/tshi-dev/UrTV/releases/latest";
-    private static final Pattern TAG = Pattern.compile("v(\\d+\\.\\d+)$");
+    private static final String VERSION_URL = "https://github.com/tshi-dev/UrTV/releases/download/apk-latest/version.txt";
 
     private Updater() {}
 
@@ -112,8 +110,41 @@ final class Updater {
         }
     }
 
-    /** Newest release tag, from the redirect of /releases/latest (no body read). Keeps the old value on any failure. */
+    /**
+     * The newest version: the version.txt the master build attaches to apk-latest (the release /releases/latest points to,
+     * so its tag is not a version), else the numbered tag /releases/latest points to. Keeps the old value on any failure.
+     */
     private static void checkLatest(Context c) {
+        String v = latestFromAsset();
+        if (v == null) v = latestFromRedirect();
+        if (v == null) return;
+        new Prefs(c).raw().edit().putString("latestVersion", v).putLong("latestCheck", System.currentTimeMillis()).apply();
+    }
+
+    private static String latestFromAsset() {
+        HttpURLConnection con = null;
+        try {
+            con = (HttpURLConnection) new URL(VERSION_URL).openConnection();   // GitHub redirects to its CDN: followed
+            con.setConnectTimeout(10000);
+            con.setReadTimeout(10000);
+            if (con.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
+            InputStream in = con.getInputStream();
+            try {
+                byte[] buf = new byte[64];   // "3.51\n": anything longer is not it
+                int n = 0, r;
+                while (n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
+                return Versions.fromText(new String(buf, 0, n, "UTF-8"));
+            } finally {
+                in.close();
+            }
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (con != null) con.disconnect();
+        }
+    }
+
+    private static String latestFromRedirect() {
         HttpURLConnection con = null;
         try {
             con = (HttpURLConnection) new URL(LATEST_URL).openConnection();
@@ -121,14 +152,9 @@ final class Updater {
             con.setConnectTimeout(10000);
             con.setReadTimeout(10000);
             con.getResponseCode();
-            String loc = con.getHeaderField("Location");
-            if (loc == null) return;
-            Matcher m = TAG.matcher(loc.trim());
-            if (!m.find()) return;
-            new Prefs(c).raw().edit().putString("latestVersion", m.group(1))
-                .putLong("latestCheck", System.currentTimeMillis()).apply();
+            return Versions.fromTag(con.getHeaderField("Location"));
         } catch (Exception e) {
-            // keep the stored value
+            return null;
         } finally {
             if (con != null) con.disconnect();
         }
