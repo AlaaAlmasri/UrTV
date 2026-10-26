@@ -14,7 +14,7 @@ One grid with three rows — `grid-template-rows: auto 1fr auto`, stage padding 
 
 **Top row — two ends, nothing in between:**
 - Left: weather and markets set as type, mirroring the date block on the right — no boxes, no pills.
-  - Big line (same size as the Hijri date): the temperature `٣٤°` in the display font, then a short Arabic condition word (`صافي`, `غائم جزئياً`…; `غبار` in gold when PM10 is high).
+  - Big line (same size as the Hijri date): the temperature `٣٤°` in the display font, then a short Arabic condition word (`صافي`, `غائم جزئياً`…; `غبار` in gold beside it, not instead, when PM10 is high; a small «Open-Meteo · قبل ١٥ د» line under the city).
   - Small line (same size as the Gregorian date): the city `·` high / low `٣٧° / ٢٤°`.
   - A short gold hairline starting at the left screen edge and fading toward the middle.
   - Under it, one quiet line: `تاسي ▼ · S&P 500 ▲ · بيتكوين ▲` — the name plus ONE direction marker only, `▲` `#79D6A0`, `▼` `#EE8B70`. No price, no percentage. If a quote cannot be loaded, hide its marker (never a dash, never a hard-coded direction).

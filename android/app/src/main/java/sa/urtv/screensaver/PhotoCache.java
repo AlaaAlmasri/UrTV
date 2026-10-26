@@ -81,16 +81,11 @@ final class PhotoCache {
         File tmp = new File(dir, name + ".tmp");
         try {
             if (con.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
-            InputStream in = con.getInputStream();
-            FileOutputStream out = new FileOutputStream(tmp);
-            try {
-                byte[] buf = new byte[16384];
-                int n;
-                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            } finally {
-                out.close();
-                in.close();
-            }
+            if (con.getContentLength() > Bounded.IMAGE_MAX) return null;
+            byte[] data;
+            try (InputStream in = con.getInputStream()) { data = Bounded.readAll(in, Bounded.IMAGE_MAX); }
+            if (!validImage(data)) return null;   // an error page or a cut download is not kept as a photo
+            try (FileOutputStream out = new FileOutputStream(tmp)) { out.write(data); }
             if (!tmp.renameTo(f)) return null;
         } finally {
             con.disconnect();
@@ -100,13 +95,24 @@ final class PhotoCache {
         return f;
     }
 
-    /** Keep the newest few; older sets are not shown again for months. */
+    /** Whether these bytes are a picture that decodes (its size is read, not the pixels) and is not absurdly large. */
+    static boolean validImage(byte[] data) {
+        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, o);
+        return o.outWidth > 0 && o.outHeight > 0 && o.outWidth <= 12000 && o.outHeight <= 12000;
+    }
+
+    /** Keep the newest few, and no more than the size budget; older sets are not shown again for months. */
     private static void prune(File dir) {
         File[] all = dir.listFiles((d, n) -> n.endsWith(".jpg"));
-        if (all == null || all.length <= KEEP) return;
+        if (all == null) return;
         Arrays.sort(all, new Comparator<File>() {
             @Override public int compare(File a, File b) { return Long.compare(b.lastModified(), a.lastModified()); }
         });
-        for (int i = KEEP; i < all.length; i++) all[i].delete();
+        long[] sizes = new long[Math.min(all.length, KEEP)];
+        for (int i = 0; i < sizes.length; i++) sizes[i] = all[i].length();
+        int keep = Bounded.fitting(sizes, Bounded.CACHE_MAX);
+        for (int i = Math.max(1, keep); i < all.length; i++) all[i].delete();   // the one just fetched always stays
     }
 }

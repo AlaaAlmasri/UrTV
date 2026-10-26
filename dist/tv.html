@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- the build: UTC time (YYYYMMDDHHMMSS) of the newest commit of the page's sources, put in by src/build.py. The app loads the page with the newer stamp (its own
      copy or a downloaded one), never by file time, and does not keep a download whose stamp is older than its own (Updater, PageStamp). -->
-<meta name="urtv-build" content="20261026032822">
+<meta name="urtv-build" content="20261026050759">
 <title>شاشة تلفزيونك</title>
 <style>
   @font-face{font-family:'Thmanyah';font-weight:300;font-style:normal;font-display:block;src:url("https://raw.githubusercontent.com/tshi-dev/UrTV/master/assets/fonts/Thmanyah-Light.woff2") format("woff2")}
@@ -375,6 +375,9 @@
     color:#FFFDF6;font-variant-numeric:tabular-nums;
     text-shadow:0 4px 70px rgba(0,0,0,.65), 0 0 130px rgba(255,236,190,.12);
   }
+  /* «حجم الساعة» (#clocksize=): large is the clock above; the others only scale its font (the sub line and the cards keep their sizes) */
+  html.ck-medium .clock{font-size:clamp(96px,min(13.6vw,24.8vh),276px)}
+  html.ck-small .clock{font-size:clamp(74px,min(10.5vw,19vh),214px)}
   .clock .d{unicode-bidi:isolate}
   .clock .d i{font-style:normal}
   .clock .d i + i{margin-left:var(--digit-gap,.09em)}
@@ -458,13 +461,17 @@
     font-size:clamp(19px,1.86vw,37px);font-weight:500;color:var(--sand)}
   .wxt{font-family:'ThmanyahDisplay','Thmanyah',serif;font-weight:700;color:#FFFCF2;direction:ltr;
     font-variant-numeric:tabular-nums}
-  .wxd.dust{color:#E8B86A}
+  .wxdust{color:#E8B86A;font-size:.82em}   /* the dust, beside the condition and not instead of it */
+  .wxdust:not(:empty)::before{content:'·';margin-inline-end:.5em;color:rgba(214,175,107,.7)}
+  .wxsrc{margin-top:.3vh;font-size:clamp(10px,.86vw,17px);font-weight:300;color:var(--dim);opacity:.8;white-space:nowrap}
+  .wxsrc:empty{display:none}
   .wxsub{margin-top:.55vh;font-size:clamp(12px,1.06vw,21px);font-weight:300;color:var(--dim);white-space:nowrap}
   .wxr:not(:empty)::before{content:'  ·  ';white-space:pre;color:rgba(214,175,107,.7)}
-  .wxt:empty,.wxd:empty,.wxr:empty{display:none}
+  .wxt:empty,.wxd:empty,.wxr:empty,.wxdust:empty{display:none}
   .rule.l{margin-left:0;margin-right:auto;background:linear-gradient(90deg,var(--gold),rgba(var(--gold-rgb),0))}
   .mk{margin-top:1.2vh;display:flex;justify-content:flex-end;gap:1.6em;white-space:nowrap;
     font-size:clamp(12px,1.06vw,21px);font-weight:400;color:#D8CDB6}
+  .mk[hidden],.mkup[hidden]{display:none}
   .mk .m{display:inline-flex;align-items:baseline;gap:.45em}
   .mk .delta{font-size:.72em}
   .mk .m.old,.mkup.old{opacity:.55}   /* the last price, a refresh failed or it is a day old */
@@ -525,8 +532,9 @@
     </div>
 
     <div class="markets">
-      <div class="wxline"><span class="wxt" id="wx-temp"></span><span class="wxd" id="wx-desc"></span></div>
+      <div class="wxline"><span class="wxt" id="wx-temp"></span><span class="wxd" id="wx-desc"></span><span class="wxdust" id="wx-dust"></span></div>
       <div class="wxsub"><span id="wx-city">الرياض</span><span class="wxr" id="wx-range"></span></div>
+      <div class="wxsrc" id="wx-src"></div>
       <div class="rule l"></div>
       <div class="mk">
         <span class="m"><span>تاسي</span><span id="tasi-chg" class="delta" hidden></span></span>
@@ -646,12 +654,16 @@ const CONFIG = {
   // digits everywhere: #digits=hindi (١٢٣, the default) or latin (123); anything else = hindi
   digits: _Q.get('digits') === 'latin' ? 'latin' : 'hindi',
   // the look of the card beside the clock: #cardstyle=current|dark1|glass1|dark3|glass3 (anything else = current)
+  // the size of the clock: #clocksize=large|medium|small (anything else = large)
+  clockSize: (v => ['medium','small'].includes(v) ? v : 'large')(_Q.get('clocksize')),
   cardStyle: (v => ['dark1','glass1','dark3','glass3'].includes(v) ? v : 'current')(_Q.get('cardstyle')),
   // the markets at the top left: #markets=tasi,spx,btc (up to 4 of tasi aramco spx btc gold silver xrp; anything else = the default)
   // and #mkstyle=arrows (a ▲/▼ only, the default) or prices (the price and the day's change)
   markets: (l => l.length ? l : ['tasi','spx','btc'])(
     _list('markets').filter((k, i, a) => ['tasi','aramco','spx','btc','gold','silver','xrp'].includes(k) && a.indexOf(k) === i).slice(0, 4)),
   mkStyle: _Q.get('mkstyle') === 'prices' ? 'prices' : 'arrows',
+  // #mkbar=off hides the markets line at the top (the weather stays); the list above is kept and no request is made for it
+  mkBar: _Q.get('mkbar') !== 'off',
   // the national days (23 September, 22 February): #national=auto (the default) or off
   national: _Q.get('national') === 'off' ? 'off' : 'auto',
   // the stocks card's watchlist: #stocks=2222,1120,AAPL,NVDA (up to 8; 4 digits = a Tadawul code, letters = a US ticker)
@@ -691,6 +703,13 @@ CONFIG.panel = CONFIG.cards[0] || 'none';   // the first one, for what only need
 const USES_OF = {smart:['matches','adhkar','prayers','prayerrow','hourly'], today:['prayers','matches','tasks']};
 const USES = k => CONFIG.cards.some(c => c === k || (USES_OF[c] || []).includes(k));
 
+// The panels' snapshot is keyed by the link without the settings that only change how things look (the card's style and place, the clock's
+// size, the strips, the photo timing): changing one of those offline must not lose the games already on screen. What changes the words or
+// the markup inside the saved panels (the teams, leagues, digits, slot, markets, their style and switch…) stays in the key.
+const SNAP_LOOK = ['cardstyle', 'panel', 'week', 'clocksize', 'adhanbar', 'yearstrip', 'national', 'photos', 'adj', 'own', 'ownmode', 'gap'];
+function snapLink(){
+  return location.hash.replace(/^#/, '').split('&').filter(kv => kv && !SNAP_LOOK.includes(kv.split('=')[0])).join('&');
+}
 // What the page keeps in localStorage is keyed by what it is for, not by the whole link (which changes with every setting and left a
 // copy behind each time): the weather by the city, the prices by the symbols, the games' time by the clubs. The panels' snapshot
 // is the one that depends on the whole link; pruneStorage() below keeps the few newest of those and drops the old link-keyed copies.
@@ -699,9 +718,9 @@ const LS = {
   hourly: 'hourly:' + CONFIG.latitude.toFixed(3) + ',' + CONFIG.longitude.toFixed(3),
   wx: 'wx:' + CONFIG.latitude.toFixed(3) + ',' + CONFIG.longitude.toFixed(3),
   stocks: 'stocks:' + CONFIG.stocks.slice().sort().join(','),
-  mk: 'mk:' + CONFIG.markets.join(','),
+  mk: 'mk:' + CONFIG.markets.join(','),   // the on/off switch is not in the key: the prices are the same
   matches: 'matchesOk:' + CONFIG.teamIds.join(',') + '|' + CONFIG.leagues.join(','),
-  snap: 'snap6:' + location.hash,
+  snap: 'snap6:' + snapLink(),
 };
 
 // every number on the screen goes through ar() or a formatter built on NU, so CONFIG.digits decides them all
@@ -1137,7 +1156,10 @@ const JITTER_MS = (()=>{
     return v * 60000;
   }catch(e){ return 0; }
 })();
-const periodic = (fn, ms) => setTimeout(() => { fn(); setInterval(fn, ms); }, ms + JITTER_MS);   // the first periodic run is late by the offset
+// the offset never exceeds the task's own period: a 2-minute task starts within 2 minutes of its period, a 30-minute or slower one
+// keeps the whole 0-29 (scaled, so TVs stay spread over the period)
+const spread = ms => Math.floor(JITTER_MS * Math.min(ms, 30*60000) / (30*60000));
+const periodic = (fn, ms) => setTimeout(() => { fn(); setInterval(fn, ms); }, ms + spread(ms));   // the first periodic run is late by the offset
 const later = fn => setTimeout(fn, JITTER_MS);   // the same offset for the refresh at midnight
 const fmtAgo = ms => { const p = riyadhParts(new Date(ms)); return 'آخر تحديث ' + fmt12(p.h, p.mi); };
 
@@ -1651,7 +1673,7 @@ function fitMatches(row){
 // row again (the names and the date keep their full form in data-full), so a card that gets smaller redoes it.
 const rowCut = row => {
   const r = row.getBoundingClientRect();
-  return [...row.children].some(c => { const b = c.getBoundingClientRect(); return b.width && (b.left < r.left - .5 || b.right > r.right + .5); });
+  return [...row.children].some(c => { const b = c.getBoundingClientRect(); return b.width && (b.left < r.left - .05 || b.right > r.right + .05); });   // as strict as fits(): a game over by half a pixel is still cut
 };
 function fitGameRow(li){
   const row = li.firstElementChild;
@@ -1717,6 +1739,7 @@ const loadMatches = guarded('matches', async function(){
   renderMatches();
   renderPanel(false, 'matches');
   loadCrests();
+  loadLive();   // a game already under way gets its score now, not at the next 2-minute tick
   if(CONFIG.events.length) await loadEvents();   // the other sports, after the games, one league at a time
 });
 
@@ -1739,8 +1762,9 @@ const PRICES = CONFIG.mkStyle === 'prices';
 
 // the default list with arrows is the markup in the page; anything else is made here, before the saved copy is put back
 function buildMarkets(){
-  if(!PRICES && TICKERS.map(t => t.key).join() === 'tasi,spx,btc') return;
   const mk = document.querySelector('.mk');
+  mk.hidden = !CONFIG.mkBar;
+  if(!PRICES && TICKERS.map(t => t.key).join() === 'tasi,spx,btc') return;
   mk.className = 'mk' + (PRICES ? ' px' : '') + (PRICES && TICKERS.length > 2 ? ' g' : '');
   mk.innerHTML = TICKERS.map(t => `<span class="m"><span>${esc(t.name)}</span>`
     + (PRICES ? `<span class="px" id="${t.px}"${t.unit ? ` data-u="${t.unit}"` : ''} hidden></span>` : '')
@@ -1887,6 +1911,7 @@ function paintMarket(t, price, pct, at){
 }
 // the dim state of each market and the line under them: «آخر تحديث ٣:١٥ م» (the oldest price that is not current), or «غير محدّث»
 function paintMkUp(){
+  if(!CONFIG.mkBar) return;
   const known = TICKERS.filter(t => MK_LAST[t.key]);
   if(!known.length) return;
   known.forEach(t => { const m = document.getElementById(t.chg); if(m && m.parentNode) m.parentNode.classList.toggle('old', !!staleMark(MK_LAST[t.key])); });
@@ -1898,10 +1923,17 @@ function paintMkUp(){
   setText(up, stale.length ? staleMark(stale[0]) : fmtAgo(Math.max(...known.map(t => MK_LAST[t.key].at || 0))));
 }
 
+// The deadline covers the answer's headers and its body: the timer stops when the body has been read (or the request failed),
+// so a server that sends headers and then stalls ends in an error like a slow one. The answer has what the callers use:
+// ok, status, json(), text(), blob().
 async function fetchT(url, ms){
   const c = new AbortController(); const id = setTimeout(()=>c.abort(), ms||12000);
-  try{ return await fetch(url,{cache:'no-store', signal:c.signal}); }
-  finally{ clearTimeout(id); }
+  let r;
+  try{ r = await fetch(url,{cache:'no-store', signal:c.signal}); }
+  catch(e){ clearTimeout(id); throw e; }
+  if(!r.ok) clearTimeout(id);   // nobody reads the body of an error
+  const body = kind => async () => { try{ return await r[kind](); }finally{ clearTimeout(id); } };
+  return {ok:r.ok, status:r.status, json:body('json'), text:body('text'), blob:body('blob')};
 }
 
 // ---- prices. First the file CI keeps (.github/tools/market_prices.py, branch data-markets): one download holds every market and the
@@ -1980,7 +2012,7 @@ function staleMark(v){
 }
 
 // One tick for the markets line and the stocks card: each symbol once (a stock on both is asked once), one request at a time.
-const WITH_LINE = !CONFIG.widget;   // the launcher's page has no markets line
+const WITH_LINE = !CONFIG.widget && (CONFIG.mkBar || CONFIG.slot === 'markets');   // no line in the launcher's page; hidden = no requests (unless the slot shows them)
 const loadMarkets = guarded('markets', async function(){
   const jobs = new Map();   // Yahoo symbol -> {key, cg, intra, tk: its markets, sk: its stocks}
   const job = (key, cg, intra) => {
@@ -2820,7 +2852,17 @@ try{ WX = Object.assign(WX, JSON.parse(localStorage.getItem(LS.wx) || '{}')); }c
 const saveWx = () => { try{ localStorage.setItem(LS.wx, JSON.stringify(WX)); }catch(e){} };
 function wxExpire(){
   if(Date.now() - WX.at < WX_STALE_MS) return;
-  ['wx-temp', 'wx-desc', 'wx-range'].forEach(id => { const el = document.getElementById(id); if(el){ setText(el, ''); el.classList.remove('dust'); } });
+  ['wx-temp', 'wx-desc', 'wx-dust', 'wx-range', 'wx-src'].forEach(id => { const el = document.getElementById(id); if(el) setText(el, ''); });
+}
+// «Open-Meteo · قبل ١٥ د»: where the weather comes from and how old the reading is (kept up to date with the clock, no request)
+function wxAgeText(ms){
+  const m = Math.floor(ms / 60000);
+  return m < 1 ? 'الآن' : m < 60 ? 'قبل ' + ar(m) + ' د' : 'قبل ' + ar(Math.floor(m / 60)) + ' س';
+}
+function wxSource(){
+  const el = document.getElementById('wx-src');
+  if(!el) return;
+  setText(el, WX.at && Date.now() - WX.at < WX_STALE_MS ? 'Open-Meteo · ' + wxAgeText(Date.now() - WX.at) : '');
 }
 async function loadWeather(){
   const q = `latitude=${CONFIG.latitude}&longitude=${CONFIG.longitude}&timezone=${encodeURIComponent(CONFIG.timezone)}`;
@@ -2836,7 +2878,7 @@ async function loadWeather(){
     setText(document.getElementById('wx-temp'), ar(Math.round(j.current.temperature_2m)) + '°');
     const d = document.getElementById('wx-desc');
     setText(d, WX_CODES[j.current.weather_code] || '');
-    d.classList.remove('dust');
+    wxSource();
     const hi = j.daily?.temperature_2m_max?.[0], lo = j.daily?.temperature_2m_min?.[0];
     setText(document.getElementById('wx-range'),
       (hi != null && lo != null) ? `${ar(Math.round(hi))}° / ${ar(Math.round(lo))}°` : '');
@@ -2855,18 +2897,14 @@ async function loadWeather(){
     if(slotNow() === 'weather') renderSlot();
   }catch(e){ return; }   // keep the last reading; with none only the city shows
 
-  // dust overrides the condition word: PM10 in µg/m³
+  // the dust is told beside the condition (never instead of it): PM10 in µg/m³
   try{
     const r = await fetchT(`https://air-quality-api.open-meteo.com/v1/air-quality?${q}&current=pm10,dust`, 12000);
     if(!r.ok) throw 0;
     const c = (await r.json()).current || {};
     WX.pm = Math.max(c.pm10 || 0, c.dust || 0); WX.pmAt = Date.now(); saveWx();
   }catch(e){}                                  // no answer: the last dust reading stands, not a clear sky
-  if(WX.pm >= 150 && Date.now() - WX.pmAt < WX_STALE_MS){
-    const d = document.getElementById('wx-desc');
-    setText(d, WX.pm >= 400 ? 'غبار كثيف' : 'غبار');
-    d.classList.add('dust');
-  }
+  setText(document.getElementById('wx-dust'), WX.pm >= 150 && Date.now() - WX.pmAt < WX_STALE_MS ? (WX.pm >= 400 ? 'غبار كثيف' : 'غبار') : '');
 }
 
 // night dimming: transparent by day, dark after 21:00 and before 07:00
@@ -3188,9 +3226,10 @@ function boot(){
   if(CONFIG.slot === 'none') document.documentElement.classList.add('slot-none');
   if(!SLOT_MATCHES) document.getElementById('match-row').textContent = '';   // not «لا شيء هذا الأسبوع»: that is the matches slot's
   if(CONFIG.cardStyle !== 'current') document.documentElement.classList.add('cs-' + CONFIG.cardStyle);
+  if(CONFIG.clockSize !== 'large') document.documentElement.classList.add('ck-' + CONFIG.clockSize);
   buildMarkets();
   restoreSnap();
-  paintMkUp(); wxExpire();
+  paintMkUp(); wxExpire(); wxSource();
   setTimeout(saveSnap, 15*1000);   // the dream can be killed before pagehide
   setInterval(saveSnap, 60*1000);
   addEventListener('pagehide', saveSnap);
@@ -3212,7 +3251,7 @@ function boot(){
   nowPlayingTick();
   setInterval(nowPlayingTick, 60*1000);
   setInterval(tickClock, 1000);
-  setInterval(()=>{ tickDates(); tickPrayer(); tickOccasion(); wxExpire(); if(!SLOT_MATCHES) renderSlot(); }, 15000);
+  setInterval(()=>{ tickDates(); tickPrayer(); tickOccasion(); wxExpire(); wxSource(); if(!SLOT_MATCHES) renderSlot(); }, 15000);
   if(SLOT_MATCHES){   // the matches timers run only while the slot shows matches
     setInterval(() => renderMatches(false), 60000);
     // 15 s a page (two games), 10 s once a league makes more than 3 pages: a round of 9 games passes in 50 s, not 75

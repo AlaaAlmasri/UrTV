@@ -156,13 +156,9 @@ final class Arabic {
             con.setConnectTimeout(10000);
             con.setReadTimeout(12000);
             con.setRequestProperty("User-Agent", "urtv/2 (Android TV screensaver)");
-            InputStream in = con.getInputStream();
-            ByteArrayOutputStream b = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
-            in.close();
-            return b.toString("UTF-8");
+            try (InputStream in = con.getInputStream()) {
+                return new String(Bounded.readAll(in, Bounded.JSON_MAX), "UTF-8");
+            }
         } finally {
             con.disconnect();
         }

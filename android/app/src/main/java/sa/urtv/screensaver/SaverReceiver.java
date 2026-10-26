@@ -23,7 +23,7 @@ import java.util.Locale;
  *       [--es panel prayers] [--es home_panel prayers,hourly,verse|none] [--es greeting on|off] [--es adhanbar on|off] [--es yearstrip on|off] [--es minrating 7] [--es genres Drama,Comedy] [--es langs English]
  *       [--es photos 30] [--es idle 10] [--es digits hindi|latin]
  *       [--es cardstyle current|dark1|glass1|dark3|glass3] [--es national auto|off]
- *       [--es markets tasi,gold,btc] [--es mkstyle arrows|prices] [--es stocks 2222,1120,AAPL]
+ *       [--es markets tasi,gold,btc] [--es mkstyle arrows|prices] [--es mkbar on|off] [--es clocksize large|medium|small] [--es stocks 2222,1120,AAPL]
  *       [--es leagues 'Saudi-Arabian Pro League,NBA']
  *       [--es prayermethod jafari|auto]   («طريقة الحساب»: auto = the country's own, jafari = Shia Ithna-Ashari)
  *       [--es prayeradj on|off] [--es adj_fajr +2 --es adj_dhuhr 0 --es adj_asr 0 --es adj_maghrib -1 --es adj_isha 0]   («تعديل وقت الصلاة», minutes -20..20)
@@ -45,6 +45,7 @@ import java.util.Locale;
  * "clear"; cdname = its name (up to 40 characters).
  * national = auto (as always from now: the quiet green look on National Day, 21-25 September, and Founding Day, 20-24 February) or off.
  * cardstyle = the look of the card beside the clock (Prefs.CARD_STYLES; current is the plain card).
+ * mkbar = the markets line at the top, on (default) or off (the weather stays; the list is kept); clocksize = the screensaver's clock.
  * markets = up to four of Prefs.MARKETS at the top left, in order; mkstyle = arrows only (as always) or the price and the day's change.
  * stocks = the watchlist of the stocks card (panel stocks): up to Prefs.MAX_STOCKS Tadawul codes (4 digits) or US tickers.
  * digits = hindi (١٢٣, as always) or latin (123). photos = minutes between background photos (Prefs.PHOTO_MINUTES). idle = minutes before the TV starts the
@@ -209,6 +210,12 @@ public class SaverReceiver extends BroadcastReceiver {
         String mkStyle = i.getStringExtra("mkstyle");
         if (mkStyle != null && !isChoice(Prefs.MK_STYLES, mkStyle))
             return "error: mkstyle is one of " + choices(Prefs.MK_STYLES);
+        String mkBar = i.getStringExtra("mkbar");
+        if (mkBar != null && !"on".equals(mkBar) && !"off".equals(mkBar))
+            return "error: mkbar is one of on off";
+        String clockSize = i.getStringExtra("clocksize");
+        if (clockSize != null && !isChoice(Prefs.CLOCK_SIZES, clockSize))
+            return "error: clocksize is one of " + choices(Prefs.CLOCK_SIZES);
         List<String> markets = codes(i.getStringExtra("markets"), Prefs.MARKETS);
         if (markets != null) {
             if (markets.contains(null)) return "error: markets are " + names(Prefs.MARKETS);
@@ -287,6 +294,8 @@ public class SaverReceiver extends BroadcastReceiver {
         if (cardStyle != null) p.setCardStyle(cardStyle);
         if (mkStyle != null) p.setMkStyle(mkStyle);
         if (markets != null) p.setMarkets(markets);
+        if (mkBar != null) p.setMarketsOn("on".equals(mkBar));
+        if (clockSize != null) p.setClockSize(clockSize);
         if (stocks != null) p.setStocks(stocks);
         if (slot != null) p.setSlot(slot);
         if (cd != null) {
@@ -402,7 +411,7 @@ public class SaverReceiver extends BroadcastReceiver {
             + "\ndigits: " + p.digits()
             + "\nnational: " + p.national()
             + "\ncardstyle: " + p.cardStyle()
-            + "\nmarkets: " + Prefs.join(p.markets(), ",") + "\nmkstyle: " + p.mkStyle()
+            + "\nmarkets: " + (p.marketsOn() ? "" : "off ") + Prefs.join(p.markets(), ",") + "\nclocksize: " + p.clockSize() + "\nmkstyle: " + p.mkStyle()
             + "\nstocks: " + Prefs.join(p.stocks(), ",")
             + "\nslot: " + p.slot()
             + "\ncountdown: " + (p.countdownDate().isEmpty() ? "none" : p.countdownDate() + " " + p.countdownName())

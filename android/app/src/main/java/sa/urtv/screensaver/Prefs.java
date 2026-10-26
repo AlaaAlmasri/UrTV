@@ -92,6 +92,8 @@ final class Prefs {
 
     // how the markets are shown (#mkstyle=; arrows is what it always showed)
     static final String[][] MK_STYLES = {{"arrows", "الاتجاه فقط ▲▼"}, {"prices", "السعر والنسبة"}};
+    // the size of the screensaver's clock (sent as #clocksize=; large is what it always was)
+    static final String[][] CLOCK_SIZES = {{"large", "كبيرة"}, {"medium", "متوسطة"}, {"small", "صغيرة"}};
     // what the bottom-left slot shows (sent to the page as #slot=; matches is what it always showed)
     static final String[][] SLOTS = {{"matches", "المباريات"}, {"weather", "الطقس"}, {"fasting", "الصيام"},
         {"countdown", "عدّ تنازلي"}, {"markets", "الأسواق"}, {"none", "بدون"}};
@@ -280,6 +282,22 @@ final class Prefs {
     }
     void setMarkets(List<String> v) { setList("markets", v); }
 
+    /** The markets line at the top (default on); off hides it and the page asks for nothing for it. The list above is kept. */
+    boolean marketsOn() { return sp.getBoolean("marketsOn", true); }
+    void setMarketsOn(boolean v) { sp.edit().putBoolean("marketsOn", v).apply(); }
+
+    String clockSize() {
+        String v = sp.getString("clockSize", "large");
+        for (String[] c : CLOCK_SIZES) if (c[0].equals(v)) return v;
+        return "large";
+    }
+    void setClockSize(String v) { sp.edit().putString("clockSize", v).apply(); }
+
+    static String clockSizeLabel(String v) {
+        for (String[] c : CLOCK_SIZES) if (c[0].equals(v)) return c[1];
+        return CLOCK_SIZES[0][1];
+    }
+
     String mkStyle() { return sp.getString("mkStyle", "arrows"); }
     void setMkStyle(String v) { sp.edit().putString("mkStyle", v).apply(); }
 
@@ -392,6 +410,8 @@ final class Prefs {
             + "&national=" + national()
             + "&markets=" + join(markets(), ",")
             + "&mkstyle=" + mkStyle()
+            + "&mkbar=" + (marketsOn() ? "on" : "off")
+            + "&clocksize=" + clockSize()
             + "&stocks=" + join(stocks(), ",")
             + "&slot=" + slot()
             + "&cd=" + countdownDate()

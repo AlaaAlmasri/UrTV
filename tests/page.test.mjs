@@ -531,8 +531,8 @@ for (const panel of ['prayers', 'verse', 'shows']) {
   await p.waitForTimeout(800);
   await p.evaluate(() => {
     document.getElementById('wx-temp').textContent = '٣٨°';
-    document.getElementById('wx-desc').textContent = 'غبار';
-    document.getElementById('wx-desc').classList.add('dust');
+    document.getElementById('wx-desc').textContent = 'صافي';
+    document.getElementById('wx-dust').textContent = 'غبار';
     paintDir(TICKERS[0], true);
     document.getElementById('match-row').innerHTML = '<div class="saved-match">SAVED</div>';
     WX.at = Date.now(); saveWx();   // (a reading fetched a moment ago: older than 3 hours it would not be shown)
@@ -542,10 +542,10 @@ for (const panel of ['prayers', 'verse', 'shows']) {
   await p.waitForTimeout(1500);
   const r = await p.evaluate(() => ({
     temp: document.getElementById('wx-temp').textContent,
-    dust: document.getElementById('wx-desc').classList.contains('dust'),
+    dust: document.getElementById('wx-desc').textContent + '+' + document.getElementById('wx-dust').textContent,
     arrow: document.getElementById('tasi-chg').textContent,
     row: document.getElementById('match-row').textContent.trim() }));
-  check('offline start: weather, arrow and match row kept', r.temp === '٣٨°' && r.dust && r.arrow === '▲' && r.row === 'SAVED', JSON.stringify(r));
+  check('offline start: weather, arrow and match row kept', r.temp === '٣٨°' && r.dust === 'صافي+غبار' && r.arrow === '▲' && r.row === 'SAVED', JSON.stringify(r));
   await ctx.close();
 }
 
@@ -1701,7 +1701,10 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
   const proLeague = clubs.filter(c => c.leagues.includes('Saudi-Arabian Pro League') && !c.leagues.includes('Saudi First Division League'));
   const longest = clubs.filter(c => c.sport === 'Soccer').sort((a, b) => b.ar.length - a.ar.length).slice(0, 4);
   const side = [...proLeague.slice(0, 14), ...longest];   // 18 sides: the 4 longest names make games 3 and 6 the worst case
-  const at = h => new Date(Date.now() + h * 36e5).toISOString().slice(0, 19) + 'Z';
+  // a fixed moment, so the day names in the rows never depend on the day the test runs: a Monday, and the last game (50 h on) is a
+  // Wednesday 8:12, the longest weekday with wide digits, «بعد يومين»
+  const LEAGUE_NOW = new Date('2026-10-26T03:12:00Z');
+  const at = h => new Date(LEAGUE_NOW.getTime() + h * 36e5).toISOString().slice(0, 19) + 'Z';
   // game 0 is the followed club's (Al-Hilal, 136013, kicks off in 3 h); 1 is under way; 2 finished 3 h ago; the rest to come
   const hrs = [3, -1, -3.2, 5, 9, 26, 28, 30, 50];
   const hilal = clubs.find(c => c.id === '136013');
@@ -1713,7 +1716,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
              strStatus: i === 1 ? '1H' : i === 2 ? 'FT' : 'NS', intHomeScore: i === 1 ? '1' : i === 2 ? '2' : null,
              intAwayScore: i === 1 ? '0' : i === 2 ? '1' : null, strProgress: i === 1 ? '58' : null };
   });
-  const FILE = { league: 'Saudi-Arabian Pro League', id: '4668', updated: new Date(Date.now() - 36e5).toISOString(), events: ROUND };
+  const FILE = { league: 'Saudi-Arabian Pro League', id: '4668', updated: new Date(LEAGUE_NOW.getTime() - 36e5).toISOString(), events: ROUND };
   const seen = [];
   const mock = r => {
     const u = new URL(r.request().url()), hdr = { 'Access-Control-Allow-Origin': '*' };
@@ -1733,6 +1736,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
     seen.length = 0;
+    await p.clock.setFixedTime(LEAGUE_NOW);
     await p.goto(page('tv.html') + '#gap=0&teams=136013&leagues=' + encodeURIComponent('Saudi-Arabian Pro League') + '&panel=matches');
     await p.waitForTimeout(1200);
     const tag = `league round at ${width}x${height}`;
@@ -2862,12 +2866,12 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
       return false;
     } });
     await p.waitForTimeout(500);
-    const first = await p.evaluate(() => document.getElementById('wx-desc').textContent);
+    const first = await p.evaluate(() => document.getElementById('wx-dust').textContent);
     round = 2;
     await p.evaluate(() => loadWeather());
     await p.waitForTimeout(500);
-    const second = await p.evaluate(() => ({ t: document.getElementById('wx-desc').textContent, dust: document.getElementById('wx-desc').classList.contains('dust') }));
-    check('weather: the last good dust reading stands when the air-quality request fails', first === 'غبار' && second.t === 'غبار' && second.dust, first + ' / ' + JSON.stringify(second));
+    const second = await p.evaluate(() => ({ t: document.getElementById('wx-dust').textContent, sky: document.getElementById('wx-desc').textContent }));
+    check('weather: the last good dust reading stands when the air-quality request fails, beside the condition', first === 'غبار' && second.t === 'غبار' && second.sky === 'صافي', first + ' / ' + JSON.stringify(second));
     await ctx.close();
   }
 }
@@ -2992,9 +2996,14 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
   await p.evaluate(() => { const now = Date.now(), seen = {}; for (let i = 0; i < 9; i++) { localStorage.setItem('snap6:#n' + i, '[]'); seen['snap6:#n' + i] = now - (i + 1) * 36e5; }
     localStorage.setItem('lsSeen', JSON.stringify(seen)); localStorage.setItem('forecast:5.000,6.000', '[]'); const s2 = JSON.parse(localStorage.getItem('lsSeen')); s2['forecast:5.000,6.000'] = now - 15 * 864e5; localStorage.setItem('lsSeen', JSON.stringify(s2)); });
   await p.waitForTimeout(500);   // Chromium writes storage out a moment after the write; the page must not start before that
+  // the copy for another city, 15 days unused, is put there at the start of every load from here on (not left to the browser's write-out, which
+  // a boot can outrun: a boot that found it «just seen» would then keep it for two weeks more)
+  await ctx.addInitScript(() => { try { const k = 'forecast:5.000,6.000', seen = JSON.parse(localStorage.getItem('lsSeen') || '{}') || {};
+    seen[k] = Date.now() - 15 * 864e5; localStorage.setItem('lsSeen', JSON.stringify(seen)); localStorage.setItem(k, '[]'); } catch (e) {} });
   await carry(p); await p.goto('about:blank'); await p.goto(page('tv.html') + '#gap=0&lat=21.5433&lon=39.1728&panel=hourly&cardstyle=dark1&teams=');   // (a new page: a changed #hash alone is no reload)
   await p.waitForTimeout(500);
-  const after = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('snap6:')).length);
+  // the other copies, not counting this page's own: whether its own copy was written out before the boot pruned is the browser's timing
+  const after = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('snap6:') && k !== LS.snap).length);
   let gone = await p.evaluate(() => localStorage.getItem('forecast:5.000,6.000'));
   // Chromium writes the storage out a moment after the page's own writes (the known flake of this file, see carry()): the pruning is idempotent,
   // so a boot that raced the write is followed by up to two more; a pruning that does not work leaves the key every time
@@ -3004,7 +3013,7 @@ for (const panel of ['shows', 'prayers', 'forecast', 'hourly', 'prayerrow', 'mat
     await p.waitForTimeout(500);
     gone = await p.evaluate(() => localStorage.getItem('forecast:5.000,6.000'));
   }
-  check('storage: the link-keyed snapshots are kept to the newest six (this page\'s own included)', after <= 6, String(after));
+  check('storage: the other link-keyed snapshots are kept to the newest six (eleven were there)', after <= 6, String(after));
   check('storage: a copy for another city unused for two weeks is dropped', gone === null);
   await ctx.close();
 }
@@ -3446,6 +3455,158 @@ for (const j of [0, 15, 29]) {
   } });
   await p.waitForTimeout(1500);
   check('a game under way after the first fixtures load: its live lookup follows at once', asked.some(u => u.includes('lookupevent.php?id=live1')), asked.join(' '));
+  await ctx.close();
+}
+
+const CARD_KINDS_TEST = ['shows','prayers','forecast','hourly','prayerrow','matches','verse','wisdom','adhkar','stocks','tasks','year','smart','today'];
+// ---- «شريط الأسواق»: #mkbar=off hides the markets line, keeps the weather, asks for nothing; the saved list comes back with on
+{
+  const SHOTS = process.env.SHOTS;   // a folder: the pictures of the new options are written there
+  const seen = [];
+  const watch = r => { const u = r.request().url(); if (/chart\/|coingecko|data-markets/.test(u)) seen.push(u); return marketNet({})(r); };
+  for (const [hash, shown, asks] of [['markets=tasi,gold&mkbar=off', false, false], ['markets=tasi,gold&mkbar=on', true, true], ['markets=tasi,gold', true, true],
+                                      ['markets=tasi,gold&mkbar=off&slot=markets', false, true]]) {
+    seen.length = 0;
+    const { p, ctx, errors } = await open('tv.html', hash, { net: watch });
+    await p.waitForTimeout(500);
+    const r = await p.evaluate(() => ({ mk: getComputedStyle(document.querySelector('.mk')).display, wx: getComputedStyle(document.querySelector('.wxline')).display,
+      bar: CONFIG.mkBar, list: CONFIG.markets.join(), up: !!document.getElementById('mk-up') && !document.getElementById('mk-up').hidden }));
+    check(`markets bar «${hash}»: ${shown ? 'shown' : 'hidden, the weather stays'}`, !errors.length && (r.mk !== 'none') === shown && r.wx !== 'none' && r.list === 'tasi,gold', JSON.stringify(r) + errors);
+    check(`markets bar «${hash}»: ${asks ? 'prices are asked for' : 'no market request at all'}`, (seen.length > 0) === asks, seen.join(' '));
+    if (SHOTS && /^markets=tasi,gold&mkbar=(off|on)$/.test(hash)) await p.screenshot({ path: path.join(SHOTS, 'mkbar-' + hash.split('=').pop() + '.png') });
+    await ctx.close();
+  }
+  {   // prices style: the «آخر تحديث» line goes with the bar
+    const { p, ctx } = await open('tv.html', 'markets=tasi,gold&mkstyle=prices&mkbar=off', { net: marketNet({}) });
+    await p.waitForTimeout(500);
+    const r = await p.evaluate(() => ({ mk: getComputedStyle(document.querySelector('.mk')).display, up: getComputedStyle(document.getElementById('mk-up')).display }));
+    check('markets bar off with prices: the line and its update note are both gone', r.mk === 'none' && r.up === 'none', JSON.stringify(r));
+    await ctx.close();
+  }
+  {   // off, then on again: the saved prices come back at once (the bar's key is the list, not the switch)
+    const { p, ctx } = await open('tv.html', 'markets=tasi,gold&mkbar=on', { net: marketNet({}) });
+    await p.waitForTimeout(500);
+    const kept = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('mk:')).join());
+    check('markets bar: the saved prices are keyed by the list only', kept === 'mk:tasi,gold', kept);
+    await ctx.close();
+  }
+}
+
+// ---- «حجم الساعة»: #clocksize=large|medium|small, every card, three screen sizes: nothing overlaps or goes off screen
+{
+  const SHOTS = process.env.SHOTS;
+  const sizes = { large: null, medium: 'medium', small: 'small' };
+  const widths = {};
+  for (const [w, h] of [[960, 540], [1280, 720], [1920, 1080]]) {
+    for (const [name, v] of Object.entries(sizes)) {
+      const bad = [], errs = [];
+      for (const panel of [...CARD_KINDS_TEST, 'none']) {
+        const { p, ctx, errors } = await open('tv.html', `teams=136013&panel=${panel}&slot=weather` + (v ? '&clocksize=' + v : ''), { width: w, height: h, now: HOME_NOW });
+        if (SAMPLE[panel]) await p.evaluate(`(${SAMPLE[panel]})(); renderPanel(false);`);
+        const r = await p.evaluate(() => {
+          const box = e => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width }; };
+          const vis = s => { const e = document.querySelector(s); return e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width ? e : null; };
+          const parts = ['.top', '.clock', '.week', '.bottom'].map(s => [s, vis(s)]).filter(x => x[1]).map(x => [x[0], box(x[1])]);
+          const hit = [];
+          for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+            const a = parts[i][1], b = parts[j][1];
+            if (a.l < b.r - 1 && b.l < a.r - 1 && a.t < b.b - 1 && b.t < a.b - 1) hit.push(parts[i][0] + '×' + parts[j][0]);
+          }
+          const off = parts.filter(([, b]) => b.l < -1 || b.r > innerWidth + 1 || b.b > innerHeight + 1).map(x => x[0]);
+          const latin = (document.querySelector('.stage').innerText.match(/[0-9]+/g) || []).filter(x => x !== '500');
+          return { hit, off, latin, cw: box(document.querySelector('.clock')).w };
+        });
+        if (r.hit.length || r.off.length || r.latin.length) bad.push(panel + ':' + JSON.stringify(r));
+        if (panel === 'prayers') widths[w + name] = r.cw;
+        if (SHOTS && panel === 'prayers' && w === 1920) await p.screenshot({ path: path.join(SHOTS, `clocksize-${name}.png`) });
+        errs.push(...errors);
+        await ctx.close();
+      }
+      check(`clock ${name} at ${w}x${h}: every card, nothing overlaps or goes off screen, Arabic digits`, !bad.length && !errs.length, bad.join(' | ') + errs.join('; '));
+    }
+    check(`clock sizes at ${w}x${h}: large > medium > small`, widths[w + 'large'] > widths[w + 'medium'] && widths[w + 'medium'] > widths[w + 'small'], JSON.stringify(widths));
+  }
+  const { p, ctx } = await open('tv.html', 'clocksize=huge');
+  check('clocksize: anything else is large', await p.evaluate(() => CONFIG.clockSize === 'large' && !/ck-/.test(document.documentElement.className)));
+  await ctx.close();
+}
+
+// ---- the weather at the top left: the condition and the dust are two facts, and the source with the reading's age is a small line
+{
+  const NOW = new Date('2026-10-22T13:40:00Z');
+  const wxNet = (pm, ageState) => r => {
+    const u = r.request().url();
+    const ok = body => { r.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) }); return true; };
+    if (/air-quality-api/.test(u)) return ageState.off ? (r.abort(), true) : ok({ current: { pm10: pm, dust: 0 } });
+    if (/api\.open-meteo\.com\/v1\/forecast/.test(u)) return ageState.off ? (r.abort(), true)
+      : ok({ current: { temperature_2m: 38, weather_code: 2 }, daily: { time: ['2026-10-22'], temperature_2m_max: [41], temperature_2m_min: [27], weather_code: [2] } });
+    return false;
+  };
+  const wxRead = p => p.evaluate(() => ({ d: document.getElementById('wx-desc').textContent, dust: document.getElementById('wx-dust').textContent,
+    src: document.getElementById('wx-src').textContent, line: document.querySelector('.wxline').innerText.replace(/\s+/g, ' ').trim() }));
+  for (const [pm, dust, why] of [[60, '', 'clean air: the condition alone'], [200, 'غبار', 'dust: beside the condition'], [450, 'غبار كثيف', 'heavy dust: beside the condition']]) {
+    const { p, ctx, errors } = await open('tv.html', '', { net: wxNet(pm, {}), now: NOW });
+    await p.waitForTimeout(600);
+    const r = await wxRead(p);
+    check(`weather ${why}`, !errors.length && r.d === 'غائم جزئياً' && r.dust === dust, JSON.stringify(r) + errors);
+    check(`weather ${pm}: the source and «الآن» under the city`, r.src === 'Open-Meteo · الآن', r.src);
+    await ctx.close();
+  }
+  {   // the age counts on, with no request; older than three hours it all goes
+    const { p, ctx } = await open('tv.html', '', { net: wxNet(0, {}), now: NOW });
+    await p.waitForTimeout(600);
+    const at = min => p.evaluate(m => { WX.at = Date.now() - m * 60000; wxExpire(); wxSource(); }, min);   // the page's clock is fixed: the reading gets older instead
+    await at(15);
+    const a = await wxRead(p);
+    await at(75);
+    const b = await wxRead(p);
+    await at(190);
+    const c = await wxRead(p);
+    check('weather age: «قبل ١٥ د», then hours, then nothing once the reading is stale',
+      a.src === 'Open-Meteo · قبل ١٥ د' && /^Open-Meteo · قبل [٠-٩]+ س$/.test(b.src) && c.src === '' && c.d === '', JSON.stringify([a.src, b.src, c.src]));
+    await ctx.close();
+  }
+  for (const [w, h] of [[960, 540], [1280, 720], [1920, 1080]]) {
+    for (const hash of ['', 'markets=tasi,aramco,gold,btc&mkstyle=prices', 'mkbar=off']) {
+      const { p, ctx } = await open('tv.html', hash, { width: w, height: h, net: wxNet(450, {}), now: NOW });
+      await p.waitForTimeout(600);
+      const r = await p.evaluate(() => {
+        const b = s => document.querySelector(s).getBoundingClientRect(), m = b('.markets'), d = b('.dates'), c = b('.clock');
+        const off = [...document.querySelectorAll('.markets *')].filter(e => { const x = e.getBoundingClientRect(); return x.width && (x.left < -1 || x.right > innerWidth + 1); }).map(e => e.id || e.className);
+        return { off, overDates: m.right > d.left - 8 && m.bottom > d.top && m.top < d.bottom, overClock: m.bottom > c.top && m.left < c.right && m.right > c.left && m.top < c.bottom,
+          src: document.getElementById('wx-src').getBoundingClientRect().height > 0, line: document.querySelector('.wxline').innerText.replace(/\s+/g, ' ').trim() };
+      });
+      check(`weather with dust and its source at ${w}x${h} (${hash || 'default'}): fits, clear of the date and the clock`, !r.off.length && !r.overDates && !r.overClock && r.src && /غائم جزئياً/.test(r.line) && /غبار كثيف/.test(r.line), JSON.stringify(r));
+      if (process.env.SHOTS && w === 1920 && hash === '') await p.screenshot({ path: path.join(process.env.SHOTS, 'weather-dust-source.png'), clip: { x: 0, y: 0, width: 700, height: 220 } });
+      await ctx.close();
+    }
+  }
+}
+
+// ---- F32: a change of look only (card style, the card's place, the clock's size) offline keeps the games already shown;
+// a change of what the saved words are made of (the digits, the teams) does not reuse them
+{
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  await ctx.route(/^https?:/, r => r.abort());
+  const p = await ctx.newPage();
+  await p.goto(page('tv.html') + '#gap=0&teams=136013&cardstyle=current');
+  await p.waitForTimeout(800);
+  await p.evaluate(() => { document.getElementById('match-row').innerHTML = '<div class="saved-match">SAVED</div>'; MATCH_OK_AT = Date.now(); saveSnap(); });
+  const row = async hash => {
+    await carry(p);
+    await p.goto(page('tv.html') + '#' + hash);
+    await p.reload();
+    await p.waitForTimeout(1200);
+    return p.evaluate(() => document.getElementById('match-row').textContent.trim());
+  };
+  for (const [hash, want, why] of [['gap=0&teams=136013&cardstyle=glass1', 'SAVED', 'the card style changed'],
+      ['gap=0&teams=136013&cardstyle=dark3&clocksize=small', 'SAVED', 'the style and the clock size changed'],
+      ['gap=0&teams=136013&panel=verse&adhanbar=0&yearstrip=1', 'SAVED', 'the card, the bar and the strip changed'],
+      ['gap=0&teams=136013&digits=latin', null, 'the digits changed (the saved words would have the wrong ones)'],
+      ['gap=0&teams=136137', null, 'another team']]) {
+    const got = await row(hash);
+    check(`offline, ${why}: ${want ? 'the games stay' : 'the old row is not reused'}`, want ? got === want : got !== 'SAVED', got);
+  }
   await ctx.close();
 }
 
