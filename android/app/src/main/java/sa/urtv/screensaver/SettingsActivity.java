@@ -30,7 +30,6 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -1160,13 +1159,9 @@ public class SettingsActivity extends Activity {
                 con = (HttpURLConnection) new URL(url).openConnection();
                 con.setConnectTimeout(12000);
                 con.setReadTimeout(15000);
-                InputStream in = con.getInputStream();
-                ByteArrayOutputStream b = new ByteArrayOutputStream();
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
-                in.close();
-                body = b.toString("UTF-8");
+                try (InputStream in = con.getInputStream()) {
+                    body = new String(Bounded.readAll(in, Bounded.JSON_MAX), "UTF-8");
+                }
             } catch (Exception ignored) {
             } finally {
                 if (con != null) con.disconnect();

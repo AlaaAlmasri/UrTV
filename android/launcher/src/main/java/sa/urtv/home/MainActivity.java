@@ -82,7 +82,7 @@ public class MainActivity extends Activity {
         int color;
     }
 
-    private final Map<String, Integer> colorCache = new HashMap<>();
+    private final Map<String, Integer> colorCache = new java.util.concurrent.ConcurrentHashMap<>();   // filled off the main thread
     // Banners and icons come from the apps at their own size (often 640x360 or more); the tiles are ~1/5 of the
     // screen wide, so they are kept at that size, and the cache holds a few MB at most (sized in KB).
     private final LruCache<String, Drawable> artCache = new LruCache<String, Drawable>(6 * 1024) {
@@ -190,7 +190,10 @@ public class MainActivity extends Activity {
         if (last != null) last.requestFocus();
         // Catch installs/removals that happened while another app was in front.
         if (getPackageManager().getChangedPackages(packageSeq) != null) buildApps();
-        if (firstShow) { firstShow = false; playEntrance(); }
+        if (firstShow) {   // the entrance plays once the favourites are on screen (they come from the loader thread)
+            firstShow = false;
+            if (appsShown) playEntrance(); else entranceDue = true;
+        }
         // New photo on return if the current one has been up for the full interval.
         if (wallIndex < 0 || SystemClock.elapsedRealtime() - wallChangedAt >= WALLPAPER_INTERVAL_MS) nextWallpaper();
         else {
@@ -214,6 +217,7 @@ public class MainActivity extends Activity {
         unregisterReceiver(dockChanged);
         unregisterReceiver(sleepChanged);
         unregisterReceiver(nowPlayingChanged);
+        loader.shutdownNow();
         homeCard.destroy();
         super.onDestroy();
     }
@@ -469,11 +473,29 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- apps
 
+    /** One small thread loads the apps' names, banners and glow colours, so the first frame (the clock, the pills, the wallpaper) never waits for them. */
+    private final java.util.concurrent.ExecutorService loader = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private int appsGen;   // each buildApps() is a new generation: an older load that finishes late is dropped
+    private boolean appsShown, entranceDue;
+    static final int BATCH_ROWS = 2;   // grid rows added per pass of the UI thread
+
     private void buildApps() {
         PackageManager pm = getPackageManager();
         android.content.pm.ChangedPackages changed = pm.getChangedPackages(packageSeq);
         if (changed != null) { packageSeq = changed.getSequenceNumber(); artCache.evictAll(); }   // an app may have a new icon
-        Map<String, App> byPkg = new HashMap<>();
+        final int gen = ++appsGen;
+        final String[] wanted = dockApps.clone();
+        if (loader.isShutdown()) return;
+        loader.execute(() -> {
+            final List<App> all = loadApps(wanted);
+            runOnUiThread(() -> { if (gen == appsGen && !isDestroyed()) showApps(all, wanted, gen); });
+        });
+    }
+
+    /** Off the main thread: every launchable app with its label, art and colour (nothing here touches a view). */
+    private List<App> loadApps(String[] wanted) {
+        PackageManager pm = getPackageManager();
+        List<App> out = new ArrayList<>();
         Map<String, String> given = AppNames.given(this);   // names the owner's agent set (dock.sh name)
         for (ResolveInfo ri : Dock.catalogue(this)) {
             ActivityInfo ai = ri.activityInfo;
@@ -495,11 +517,17 @@ public class MainActivity extends Activity {
                 if (a.art == null) artCache.put("i:" + a.pkg, a.art = fitted(ri.loadIcon(pm), false));
             }
             a.color = sampleColor(a.pkg, a.art);
-            byPkg.put(a.pkg, a);
+            out.add(a);
         }
+        return out;
+    }
 
+    /** On the main thread: the dock first, then the grid a few rows at a time, so a long list never holds up a frame. */
+    private void showApps(List<App> all, String[] wanted, int gen) {
+        Map<String, App> byPkg = new HashMap<>();
+        for (App a : all) byPkg.put(a.pkg, a);
         List<App> dock = new ArrayList<>();
-        for (String p : dockApps) if (byPkg.containsKey(p)) dock.add(byPkg.remove(p));
+        for (String p : wanted) if (byPkg.containsKey(p)) dock.add(byPkg.remove(p));
         cardByPkg.clear();
         List<App> rest = new ArrayList<>(byPkg.values());
         Collections.sort(rest, (x, y) -> x.label.compareToIgnoreCase(y.label));
@@ -517,19 +545,40 @@ public class MainActivity extends Activity {
             p.setMargins(i == 0 ? 0 : dp(10), 0, i == dock.size() - 1 ? 0 : dp(10), 0);
             dockRow.addView(tile, p);
         }
+        appsLabel.setVisibility(rest.isEmpty() ? View.GONE : View.VISIBLE);
+        wireFocus();
+        if (!dock.isEmpty()) { title.setText(dock.get(0).label); setGlow(dock.get(0).color); }
+        View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
+        if (last != null) last.requestFocus();
+        else if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
+        appsShown = true;
+        if (entranceDue) { entranceDue = false; playEntrance(); }
+        applyPendingFocus();
+        addGridRows(rest, 0, gen);
+    }
 
+    private void addGridRows(List<App> rest, int from, int gen) {
+        if (gen != appsGen || isDestroyed()) return;
+        int to = Math.min(rest.size(), from + BATCH_ROWS * cols);
         LinearLayout row = null;
-        for (int i = 0; i < rest.size(); i++) {
+        for (int i = from; i < to; i++) {
             if (i % cols == 0) {
                 row = new LinearLayout(this);
                 row.setClipChildren(false);
                 row.setClipToPadding(false);
                 grid.addView(row, llp(-1, -2, 0, 0, 0, dp(26)));
+            } else if (row == null) {
+                row = (LinearLayout) grid.getChildAt(grid.getChildCount() - 1);
             }
             View tile = tile(rest.get(i), false);
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
             p.setMargins(i % cols == 0 ? 0 : dp(10), 0, i % cols == cols - 1 ? 0 : dp(10), 0);
             row.addView(tile, p);
+        }
+        if (to < rest.size()) {
+            wireFocus();
+            handler.post(() -> addGridRows(rest, to, gen));
+            return;
         }
         // Pad the last row so tiles keep their width.
         if (row != null) for (int i = rest.size() % cols; i != 0 && i < cols; i++) {
@@ -537,13 +586,17 @@ public class MainActivity extends Activity {
             p.setMargins(dp(10), 0, i == cols - 1 ? 0 : dp(10), 0);
             row.addView(new View(this), p);
         }
-        appsLabel.setVisibility(rest.isEmpty() ? View.GONE : View.VISIBLE);
         wireFocus();
+        applyPendingFocus();
+        focusPkgAfter = null;   // not found (the app is gone): never take the focus later
+    }
 
-        if (!dock.isEmpty()) { title.setText(dock.get(0).label); setGlow(dock.get(0).color); }
-        View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
-        if (last != null) last.requestFocus();
-        else if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
+    /** After «إضافة إلى المفضلة» and the like: the focus goes to the app that was changed, once its tile exists (the loads are in the background). */
+    private String focusPkgAfter;
+    private void applyPendingFocus() {
+        if (focusPkgAfter == null) return;
+        View c = cardByPkg.get(focusPkgAfter);
+        if (c != null) { focusPkgAfter = null; c.requestFocus(); }
     }
 
     /** A 16:9 card with the app's banner; the name shows under it while focused. */
@@ -716,9 +769,8 @@ public class MainActivity extends Activity {
         for (String p : dock) if (isInstalled(p)) installed.add(p);
         prefs().edit().putString("dock", android.text.TextUtils.join(",", installed)).apply();
         dockApps = installed.toArray(new String[0]);
+        focusPkgAfter = focusPkg;
         buildApps();
-        View c = cardByPkg.get(focusPkg);
-        if (c != null) c.post(c::requestFocus);
     }
 
     private void showAppMenu(View anchor, String pkg, boolean inDock) {
@@ -1054,7 +1106,7 @@ public class MainActivity extends Activity {
         if (System.currentTimeMillis() - prefs().getLong("photoIndexAt", 0) < INDEX_MAX_AGE_MS) return;
         if (failedRecently("index.json")) return;
         try {
-            org.json.JSONArray a = new org.json.JSONArray(new String(download(PHOTO_BASE + "index.json"), "UTF-8"));
+            org.json.JSONArray a = new org.json.JSONArray(new String(download(PHOTO_BASE + "index.json", Bounded.JSON_MAX), "UTF-8"));
             List<String> names = new ArrayList<>();
             for (int i = 0; i < a.length(); i++) {
                 String f = a.getJSONObject(i).optString("f");
@@ -1068,19 +1120,26 @@ public class MainActivity extends Activity {
         }
     }
 
-    private static byte[] download(String url) throws java.io.IOException {
+    /** At most max bytes (Bounded): the photo list is JSON_MAX, a photo IMAGE_MAX; a longer answer is an IOException and nothing is kept. */
+    private static byte[] download(String url, int max) throws java.io.IOException {
         java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
         c.setConnectTimeout(10000);
         c.setReadTimeout(30000);
-        try (java.io.InputStream in = c.getInputStream()) {
-            java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[16384];
-            int n;
-            while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
-            return b.toByteArray();
+        try {
+            if (c.getResponseCode() != 200) throw new java.io.IOException("HTTP " + c.getResponseCode());
+            if (c.getContentLength() > max) throw new java.io.IOException("too large");
+            try (java.io.InputStream in = c.getInputStream()) { return Bounded.readAll(in, max); }
         } finally {
             c.disconnect();
         }
+    }
+
+    /** Whether these bytes are a picture that decodes (its size is read, not the pixels) and is not absurdly large. */
+    private static boolean validImage(byte[] data) {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(data, 0, data.length, o);
+        return o.outWidth > 0 && o.outHeight > 0 && o.outWidth <= 12000 && o.outHeight <= 12000;
     }
 
     /** Opens the same photo again: the first pass reads only its size. */
@@ -1094,10 +1153,8 @@ public class MainActivity extends Activity {
             if (in == null) return null;
             BitmapFactory.decodeStream(in, null, o);
         }
-        int want = Math.max(1, getResources().getDisplayMetrics().widthPixels), sample = 1;
-        while (o.outWidth / (sample * 2) >= want) sample *= 2;
         o.inJustDecodeBounds = false;
-        o.inSampleSize = sample;
+        o.inSampleSize = Bounded.sampleSize(o.outWidth, getResources().getDisplayMetrics().widthPixels);
         o.inPreferredConfig = Bitmap.Config.RGB_565;
         try (java.io.InputStream in = source.open()) {
             return in == null ? null : BitmapFactory.decodeStream(in, null, o);
@@ -1141,43 +1198,58 @@ public class MainActivity extends Activity {
         wallChangedAt = SystemClock.elapsedRealtime();
         final int idx = wallIndex;
         final String fallback = "wallpapers/" + wallpapers[idx % wallpapers.length];
+        final int gen = ++wallGen;   // a photo that arrives after a newer request is not shown
         new Thread(() -> {
-            if (!only) {   // no network while only the owner's photos show
-                refreshPhotoIndex();
-                pruneCachedPhotos(remotePhotos());
-            }
+            // 1. what is on the device now, at once: the owner's photo, the hosted one already kept, else the bundled one
             Bitmap bm = null;
+            java.io.File f = null;
             if (idx >= base) {
                 final Uri photo = OWN.buildUpon().appendPath(String.valueOf(idx - base + 1)).build();
                 try {
                     bm = decode(() -> getContentResolver().openInputStream(photo));
                 } catch (java.io.IOException | RuntimeException ignored) { }
             } else if (idx >= wallpapers.length) {
-                java.io.File f = new java.io.File(getFilesDir(), "photos/" + remote[idx - wallpapers.length]);
-                try {
-                    if (!f.isFile() && failedRecently(f.getName())) throw new java.io.IOException("failed lately");   // the bundled one meanwhile
-                    if (!f.isFile()) {
-                        byte[] data;
-                        try { data = download(PHOTO_BASE + f.getName()); }
-                        catch (java.io.IOException e) { photoFailed.put(f.getName(), System.currentTimeMillis()); throw e; }
-                        java.io.File dir = f.getParentFile();
-                        if (dir.isDirectory() || dir.mkdirs()) {
-                            java.io.File tmp = new java.io.File(dir, f.getName() + ".tmp");
-                            try (java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) { out.write(data); }
-                            if (!tmp.renameTo(f)) tmp.delete();
-                        }
-                    }
-                    bm = decode(() -> new java.io.FileInputStream(f));
-                } catch (java.io.IOException ignored) { }
+                f = new java.io.File(getFilesDir(), "photos/" + remote[idx - wallpapers.length]);
+                if (f.isFile()) {
+                    final java.io.File kept = f;
+                    try { bm = decode(() -> new java.io.FileInputStream(kept)); } catch (java.io.IOException | RuntimeException ignored) { }
+                }
             }
+            final boolean needsDownload = f != null && bm == null;
             if (bm == null) {
                 try { bm = decode(() -> getAssets().open(fallback)); }
                 catch (java.io.IOException ignored) { }
             }
-            Bitmap result = bm;
-            runOnUiThread(() -> showWallpaper(result));
+            showWallpaperIfCurrent(bm, gen);
+            if (only) return;   // no network while only the owner's photos show
+            // 2. then the network: the photo list (once a day), the cache pruned, and the hosted photo if it was missing
+            refreshPhotoIndex();
+            pruneCachedPhotos(remotePhotos());
+            if (!needsDownload || !Arrays.asList(remotePhotos()).contains(f.getName()) || failedRecently(f.getName())) return;
+            try {
+                byte[] data;
+                try { data = download(PHOTO_BASE + f.getName(), Bounded.IMAGE_MAX); }
+                catch (java.io.IOException e) { photoFailed.put(f.getName(), System.currentTimeMillis()); throw e; }
+                if (!validImage(data)) { photoFailed.put(f.getName(), System.currentTimeMillis()); return; }   // not kept, not asked for again for an hour
+                java.io.File dir = f.getParentFile();
+                if (dir.isDirectory() || dir.mkdirs()) {
+                    java.io.File tmp = new java.io.File(dir, f.getName() + ".tmp");
+                    try (java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) { out.write(data); }
+                    if (!tmp.renameTo(f)) tmp.delete();
+                }
+                final java.io.File got = f;
+                Bitmap fresh = got.isFile() ? decode(() -> new java.io.FileInputStream(got)) : null;
+                showWallpaperIfCurrent(fresh, gen);
+            } catch (java.io.IOException | RuntimeException ignored) { }
         }).start();
         scheduleWallpaper(WALLPAPER_INTERVAL_MS);
+    }
+
+    private int wallGen;   // counts the requests for a wallpaper (main thread)
+
+    /** From the loading thread: shown only if no newer request has been made since this one started. */
+    private void showWallpaperIfCurrent(Bitmap bm, int gen) {
+        if (bm != null) runOnUiThread(() -> { if (gen == wallGen) showWallpaper(bm); });
     }
 
     private void showWallpaper(Bitmap bm) {
