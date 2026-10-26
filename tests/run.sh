@@ -48,6 +48,7 @@ python3 tests/photos_sh_test.py
 python3 tests/music_adhan_own_test.py
 python3 tests/own_adhan_test.py
 python3 tests/own_adhan_keep_test.py
+python3 tests/player_logic_test.py
 python3 tests/pill_text_test.py
 python3 tests/tasks_card_test.py
 python3 tests/now_playing_test.py

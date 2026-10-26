@@ -21,7 +21,7 @@ import java.util.Set;
  * first time it is needed, so an adhan still plays when the connection is down.
  */
 final class Adhan {
-    static final int VOICES = 21;
+    static final int VOICES = AdhanVoices.COUNT;
 
     /** Where the recordings come from and under which licence. */
     static final String SOURCE = "archive.org/details/azaan-of-world-mosques_202608 (Public Domain Mark 1.0)";
@@ -126,27 +126,30 @@ final class Adhan {
     static boolean isCached(Context c, int voice) { return cached(c, voice).length() > MIN_BYTES; }
 
     /**
-     * The chosen voice, on its own thread, unless it is on the TV already: asked for by the alarm scheduler and the
-     * receiver, so the adhan plays from the cache at its prayer time and the screen «تلاوة» need not have been opened.
+     * The chosen voices (the usual one and the one for Fajr), on their own thread, unless they are on the TV already: asked for by the alarm
+     * scheduler and the receiver, so the adhan plays from the cache at its prayer time and the screen «تلاوة» need not have been opened.
      * A failed try is not repeated for an hour.
      */
     static void prefetchChosen(final Context c) {
         final Prefs prefs = new Prefs(c);
-        final int chosen = prefs.voice();
+        final int chosen = prefs.voice(), fajr = prefs.fajrVoice();
         long now = System.currentTimeMillis();
-        if (isCached(c, chosen) || now - prefs.prefetchTried() < TRY_AGAIN_MS) return;
+        if ((isCached(c, chosen) && isCached(c, fajr)) || now - prefs.prefetchTried() < TRY_AGAIN_MS) return;
         prefs.setPrefetchTried(now);
-        new Thread(() -> download(c, chosen), "adhan-chosen").start();
+        new Thread(() -> {
+            download(c, chosen);
+            if (fajr != chosen) download(c, fajr);
+        }, "adhan-chosen").start();
     }
 
     /**
      * Downloads every voice that is not in the cache yet, one at a time, on its own thread: the chosen voice first,
-     * then the others, and a voice that fails is skipped, not the end of the round. At most one round a day. The
+     * then the Fajr one, then the others, and a voice that fails is skipped, not the end of the round. At most one round a day. The
      * numbered files of the old source are removed once.
      */
     static void prefetchAll(final Context c) {
         final Prefs prefs = new Prefs(c);
-        final int chosen = prefs.voice();
+        final int chosen = prefs.voice(), fajr = prefs.fajrVoice();
         final String today = new SimpleDateFormat("yyyyMMdd", Locale.US).format(new Date());
         if (today.equals(prefs.prefetchDay())) return;
         prefs.setPrefetchDay(today);
@@ -155,8 +158,9 @@ final class Adhan {
             File[] old = dir.listFiles((d, n) -> n.startsWith("azan") && n.endsWith(".mp3"));
             if (old != null) for (File f : old) f.delete();
             download(c, chosen);
+            if (fajr != chosen) download(c, fajr);
             for (int voice = 1; voice <= VOICES; voice++) {
-                if (voice == chosen) continue;
+                if (voice == chosen || voice == fajr) continue;
                 download(c, voice);   // a failure here is that voice's: the next one is still asked for
                 try { Thread.sleep(2000); } catch (InterruptedException e) { return; }   // gently: this is not urgent
             }

@@ -36,16 +36,49 @@ final class Prefs {
     /** The TV's own volume while an adhan plays, kept on disk so it comes back even if the player was stopped mid-adhan (-1: none). */
     int savedTvVolume() { return sp.getInt("tv_volume_saved", -1); }
     void setSavedTvVolume(int v) { sp.edit().putInt("tv_volume_saved", v).commit(); }
+    /** The level the adhan set the volume to (-1: not known), so a volume the person changed during the adhan is left alone afterwards. */
+    int adhanLevel() { return sp.getInt("tv_volume_adhan_level", -1); }
+    void setAdhanLevel(int v) { sp.edit().putInt("tv_volume_adhan_level", v).commit(); }
 
     /** The voice number that stands for the person's own recording (OwnAdhan); the numbered ones are 1..21. */
     static final int OWN = 0;
     boolean ownChosen() { return sp.getBoolean("adhan_own", false); }
-    void setOwnChosen(boolean on) { sp.edit().putBoolean("adhan_own", on).apply(); }
-    /** What plays: OWN when the recording is chosen and still on the TV, else the numbered voice. */
+    void setOwnChosen(boolean on) { freezeFajr(); sp.edit().putBoolean("adhan_own", on).apply(); }
+    /** What plays at the prayers other than Fajr: OWN when the recording is chosen and still on the TV, else the numbered voice. */
     int playVoice(Context c) { return ownChosen() && OwnAdhan.exists(c) ? OWN : voice(); }
 
-    int voice() { int v = sp.getInt("adhan_voice", 1); return v < 1 || v > Adhan.VOICES ? 1 : v; }
-    void setVoice(int voice) { sp.edit().putInt("adhan_voice", voice).apply(); }
+    /** The numbered voice for Dhuhr, Asr, Maghrib and Isha (never a Fajr recording: a TV that had chosen one keeps it for Fajr). */
+    int voice() { return AdhanVoices.normalVoice(sp.getInt("adhan_voice", AdhanVoices.DEFAULT)); }
+    void setVoice(int voice) { freezeFajr(); sp.edit().putInt("adhan_voice", voice).apply(); }
+
+    /** «مؤذن الفجر»: the numbered voice for Fajr. A TV whose one voice was a Fajr recording keeps it here; the others start with فجر الحرم المكي. */
+    int fajrVoice() {
+        return AdhanVoices.fajrVoice(sp.contains("adhan_fajr_voice") ? sp.getInt("adhan_fajr_voice", -1) : -1,
+                sp.getInt("adhan_voice", AdhanVoices.DEFAULT));
+    }
+    void setFajrVoice(int voice) { freezeFajr(); sp.edit().putInt("adhan_fajr_voice", voice).putBoolean("adhan_fajr_own", false).apply(); }
+    /** The person's own recording at Fajr: until it is chosen apart it follows the one for the other prayers (as it did before there was a Fajr voice). */
+    boolean fajrOwn() { return sp.contains("adhan_fajr_own") ? sp.getBoolean("adhan_fajr_own", false) : ownChosen(); }
+    void setFajrOwn(boolean on) { freezeFajr(); sp.edit().putBoolean("adhan_fajr_own", on).apply(); }
+    /** What plays at Fajr: OWN when the recording is chosen for it and still on the TV, else the Fajr voice. */
+    int playFajrVoice(Context c) { return fajrOwn() && OwnAdhan.exists(c) ? OWN : fajrVoice(); }
+    /** What plays at a prayer: Fajr has its own voice. */
+    int playVoiceFor(Context c, boolean fajr) { return fajr ? playFajrVoice(c) : playVoice(c); }
+
+    /**
+     * Writes down what Fajr is using now before one of the two choices changes, so a change to the other prayers' voice never moves the one
+     * for Fajr (nothing is written when the TV starts; the old single voice is read as it is until then).
+     */
+    private void freezeFajr() {
+        SharedPreferences.Editor e = sp.edit();
+        if (!sp.contains("adhan_fajr_voice")) e.putInt("adhan_fajr_voice", fajrVoice());
+        if (!sp.contains("adhan_fajr_own")) e.putBoolean("adhan_fajr_own", ownChosen());
+        e.apply();
+    }
+
+    /** «أذان مختصر»: the adhan stops after its first minute with a short fade (not the few seconds of a preview). Off until it is turned on. */
+    boolean adhanShort() { return sp.getBoolean("adhan_short", false); }
+    void setAdhanShort(boolean on) { sp.edit().putBoolean("adhan_short", on).apply(); }
 
     /** The last adhan that played (a preview too), for `music.sh adhan`. */
     long lastAdhan() { return sp.getLong("adhan_at", 0); }

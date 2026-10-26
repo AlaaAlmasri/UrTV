@@ -200,7 +200,7 @@ check("Ramadan uses the Umm al-Qura calendar", "islamic-umalqura" in prayers)
 check("Aladhan is the online source, method 4", "api.aladhan.com" in prayers and "method=4" in prayers)
 
 adhan = text(TILAWAH / "Adhan.java")
-check("21 adhan voices", "VOICES = 21" in adhan)
+check("21 adhan voices", "VOICES = AdhanVoices.COUNT" in adhan and "COUNT = 21" in text(TILAWAH / "AdhanVoices.java"))
 check("the recordings come from the free Archive.org collection",
       "archive.org/download/azaan-of-world-mosques_202608/" in adhan)
 check("the licence is named", "Public Domain Mark 1.0" in adhan and "SOURCE" in adhan)

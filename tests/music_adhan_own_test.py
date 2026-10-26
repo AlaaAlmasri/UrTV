@@ -26,7 +26,7 @@ if [ "$3" = --push-b64 ]; then
 fi
 echo "$3" >> "$SENT"
 case "$3" in
-  *GET_PLAYER*) printf 'Broadcast completed: result=0, data="playing=0|source=none|adhan=on|voice=%s|own_bytes=%s|adhan_next=0|adhan_last=0"\n' "${FAKE_VOICE:-3}" "${FAKE_OWN:-0}" ;;
+  *GET_PLAYER*) printf 'Broadcast completed: result=0, data="playing=0|source=none|adhan=on|voice=%s|fajr_voice=10|adhan_short=off|own_bytes=%s|adhan_next=0|adhan_last=0"\n' "${FAKE_VOICE:-3}" "${FAKE_OWN:-0}" ;;
   *ADHAN_OWN*"op add"*)
     if [ -n "${FAKE_ADD_FAIL:-}" ] && { [ "$FAKE_ADD_FAIL" = all ] || [[ "$3" != *"--es path"* ]]; }; then
       echo 'Broadcast completed: result=0, data="error: not an m4a (AAC) or Ogg (Opus) recording"'
@@ -34,6 +34,10 @@ case "$3" in
       printf 'Broadcast completed: result=0, data="saved\nown: 40 KB (in use)"\n'
     fi ;;
   *ADHAN_OWN*"op clear"*) printf 'Broadcast completed: result=0, data="saved\nown: none"\n' ;;
+  *sa.urtv.home.FAJR_VOICE*"--ei voice 0"*)
+    if [ -n "${FAKE_NO_OWN:-}" ]; then echo 'Broadcast completed: result=0, data="error: no recording of your own yet"'
+    else printf 'Broadcast completed: result=0, data="saved\nown: 40 KB (in use)"\n'; fi ;;
+  *sa.urtv.home.FAJR_VOICE*) printf 'Broadcast completed: result=0, data="saved\nown: none"\n' ;;
   *sa.urtv.home.VOICE*"--ei voice 0"*)
     if [ -n "${FAKE_NO_OWN:-}" ]; then echo 'Broadcast completed: result=0, data="error: no recording of your own yet"'
     else printf 'Broadcast completed: result=0, data="saved\nown: 40 KB (in use)"\n'; fi ;;
@@ -132,6 +136,36 @@ check("voice 7 still works", rc == 0 and sent == [VOICE + "--ei voice 7"] and ou
 for bad in ("0", "22", "x", "own; reboot", "-1", ""):
     rc, out, sent, ff = run("adhan", "voice", bad) if bad else run("adhan", "voice")
     check(f"voice {bad!r}: refused, nothing sent", rc != 0 and not sent, (out, sent))
+# ---- «مؤذن الفجر», the Fajr voice, and «أذان مختصر»
+FAJR = "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.FAJR_VOICE "
+SHORT = "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN_SHORT "
+for fajr_recording in ("10", "13", "17", "20"):
+    rc, out, sent, ff = run("adhan", "voice", fajr_recording)
+    check(f"voice {fajr_recording} is a Fajr recording: refused, pointed to fajr-voice, nothing sent",
+          rc == 2 and f"fajr-voice {fajr_recording}" in out and not sent, (rc, out, sent))
+rc, out, sent, ff = run("adhan", "fajr-voice", "13")
+check("fajr-voice 13", rc == 0 and sent == [FAJR + "--ei voice 13"] and out.strip() == "Fajr voice 13.", (out, sent))
+rc, out, sent, ff = run("adhan", "fajr-voice", "5")
+check("fajr-voice takes a normal recording too", rc == 0 and sent == [FAJR + "--ei voice 5"], (out, sent))
+rc, out, sent, ff = run("adhan", "fajr-voice", "own")
+check("fajr-voice own", rc == 0 and sent == [FAJR + "--ei voice 0"] and "your own recording" in out, (out, sent))
+rc, out, sent, ff = run("adhan", "fajr-voice", "own", env_extra={"FAKE_NO_OWN": "1"})
+check("fajr-voice own with no recording of the person's: refused", rc != 0 and "adhan add" in out, out)
+for bad in ("0", "22", "x", "own; reboot", "-1"):
+    rc, out, sent, ff = run("adhan", "fajr-voice", bad)
+    check(f"fajr-voice {bad!r}: refused, nothing sent", rc != 0 and not sent, (out, sent))
+rc, out, sent, ff = run("adhan", "fajr-voice")
+check("fajr-voice without a number: usage", rc != 0 and not sent, out)
+rc, out, sent, ff = run("adhan", "now", "fajr")
+check("now fajr plays the Fajr voice", rc == 0 and sent == ["am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN --ez fajr true"], (out, sent))
+rc, out, sent, ff = run("adhan", "short", "on")
+check("short on", rc == 0 and sent == [SHORT + "--ez on true"] and "first minute" in out, (out, sent))
+rc, out, sent, ff = run("adhan", "short", "off")
+check("short off", rc == 0 and sent == [SHORT + "--ez on false"], (out, sent))
+for bad in ("yes", "", "on off"):
+    rc, out, sent, ff = run("adhan", "short", bad) if bad else run("adhan", "short")
+    check(f"short {bad!r}: refused, nothing sent", rc != 0 and not sent, (out, sent))
+
 rc, out, sent, ff = run("adhan", "own-clear")
 check("own-clear", rc == 0 and sent == [OWN + "--es op clear"] and "removed" in out, (out, sent))
 rc, out, sent, ff = run("adhan", "own-clear", "x")
@@ -140,6 +174,7 @@ rc, out, sent, ff = run("adhan", env_extra={"FAKE_OWN": "1843200", "FAKE_VOICE":
 check("adhan state says the voice is own and its size", rc == 0 and "voice=own" in out and "own=1800 KB" in out, out)
 rc, out, sent, ff = run("adhan")
 check("adhan state with none: says how to add one", rc == 0 and "own=none" in out and "adhan add FILE" in out and "voice=3" in out, out)
+check("adhan state shows the Fajr voice and the short adhan", "fajr_voice=10" in out and "adhan_short=off" in out, out)
 
 # ---- with the real ffmpeg, on generated sound
 if shutil.which("ffmpeg") and shutil.which("ffprobe"):

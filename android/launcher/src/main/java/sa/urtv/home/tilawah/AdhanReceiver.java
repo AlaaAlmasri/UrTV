@@ -33,7 +33,8 @@ public class AdhanReceiver extends BroadcastReceiver {
         long due = intent.getLongExtra(AdhanScheduler.EXTRA_DUE, 0);
         if (prefs.adhanOn() && screenOn(context) && !alreadyPlayed(prefs, due, now)) {
             if (due > 0) prefs.setLastDue(due); else prefs.setLastAlarmAt(now);
-            MusicService.adhan(context, prefs.playVoice(context), null, 0);
+            int prayer = intent.getIntExtra(AdhanScheduler.EXTRA_PRAYER, -1);   // an alarm of an older version has none: the usual voice
+            MusicService.adhan(context, prefs.playVoiceFor(context, prayer == PrayerTimes.FAJR), null, 0);
         }
         AdhanScheduler.schedule(context);
         PrayerTimes.refresh(context, null);

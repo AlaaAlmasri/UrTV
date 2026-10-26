@@ -8,9 +8,11 @@
 #   optimize/music.sh seek 10              forward 10 s (negative: back)
 #   optimize/music.sh sleep 30             stop after 30 min (0 cancels)
 #   optimize/music.sh adhan                the adhan: on/off, the voice, when the next one is
-#   optimize/music.sh adhan now [voice]    play it right now
+#   optimize/music.sh adhan now [voice|fajr]  play it right now (fajr: the voice chosen for Fajr)
 #   optimize/music.sh adhan on | off
-#   optimize/music.sh adhan voice 3        which of the 21 recordings plays at the prayer times
+#   optimize/music.sh adhan voice 3        which recording plays at Dhuhr, Asr, Maghrib and Isha (1-21, but the four Fajr ones are for Fajr only)
+#   optimize/music.sh adhan fajr-voice 10  «مؤذن الفجر»: the recording for Fajr (own = your own recording); default 10, «فجر الحرم المكي»
+#   optimize/music.sh adhan short on|off   «أذان مختصر»: the adhan stops after its first minute with a 3-second fade (off by default)
 #   optimize/music.sh adhan volume 60      the adhan's own volume, 10-100 (percent of the TV's maximum)
 #   optimize/music.sh adhan add FILE       the person's own recording as the adhan («أذان من ملفي»): made small here (mono AAC, about
 #                                          48 kbps, at most 5 minutes; needs ffmpeg on this computer), put on the TV, and made the voice.
@@ -98,9 +100,11 @@ Usage: optimize/music.sh <command> [arguments]
   pause | resume | toggle | next | prev | stop
   seek <seconds>          jump forward/back (e.g. seek -10)
   sleep <minutes>         sleep timer; 0 cancels
-  adhan [now [voice]]     the adhan: its state, play it now, on/off, or the voice
+  adhan [now [voice|fajr]]   the adhan: its state, play it now, on/off, or the voice
   adhan on | off
-  adhan voice <1-21 | own>
+  adhan voice <1-21 | own>   (not the Fajr recordings 10, 13, 17, 20)
+  adhan fajr-voice <1-21 | own>
+  adhan short on | off
   adhan volume <10-100>
   adhan add <file>        your own recording as the adhan (needs ffmpeg here); adhan own-clear removes it
 EOF
@@ -191,7 +195,7 @@ PY
         out=$(tv "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.GET_PLAYER")
         data=$(printf '%s\n' "$out" | sed -n 's/.*data="\(.*\)"/\1/p' | tail -n 1)
         [ -n "$data" ] || { echo "No status from sa.urtv.home. Is the app installed and the TV reachable?" >&2; exit 1; }
-        printf '%s\n' "$data" | tr '|' '\n' | grep -E '^(adhan=|voice=|adhan_volume=|adhan_exact=|adhan_next|adhan_last|source=|playing=)'
+        printf '%s\n' "$data" | tr '|' '\n' | grep -E '^(adhan=|voice=|fajr_voice=|adhan_short=|adhan_volume=|adhan_exact=|adhan_next|adhan_last|source=|playing=)'
         own=$(printf '%s\n' "$data" | tr '|' '\n' | sed -n 's/^own_bytes=//p')
         if [ "${own:-0}" -gt 0 ] 2> /dev/null; then
           echo "own=$((own / 1024)) KB (your own recording; adhan voice own uses it, adhan own-clear removes it)"
@@ -210,7 +214,9 @@ PY
         ;;
       now)
         [ $# -le 2 ] || usage
-        if [ $# -eq 2 ]; then
+        if [ $# -eq 2 ] && [ "$2" = fajr ]; then
+          tv "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN --ez fajr true" > /dev/null
+        elif [ $# -eq 2 ]; then
           voice=$2
           case "$voice" in ''|*[!0-9]*) usage;; esac
           tv "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN --ei voice $voice" > /dev/null
@@ -231,8 +237,24 @@ PY
         [ "$voice" != own ] || voice=0
         case "$voice" in ''|*[!0-9]*) usage;; esac
         { [ "$voice" -le 21 ] && { [ "$voice" -ge 1 ] || [ "$2" = own ]; }; } || { echo "The voice is 1-21, or own." >&2; exit 2; }
+        case "$voice" in 10|13|17|20) echo "Voice $voice is a Fajr recording: it plays at Fajr only. Use: optimize/music.sh adhan fajr-voice $voice" >&2; exit 2;; esac
         own_send "sa.urtv.home.VOICE --ei voice $voice" > /dev/null || { echo "There is no recording of your own on the TV yet (optimize/music.sh adhan add FILE)." >&2; exit 1; }
         if [ "$voice" -eq 0 ]; then echo "Adhan voice: your own recording."; else echo "Adhan voice $voice."; fi
+        ;;
+      fajr-voice)
+        [ $# -eq 2 ] || usage
+        voice=$2
+        [ "$voice" != own ] || voice=0
+        case "$voice" in ''|*[!0-9]*) usage;; esac
+        { [ "$voice" -le 21 ] && { [ "$voice" -ge 1 ] || [ "$2" = own ]; }; } || { echo "The voice is 1-21, or own." >&2; exit 2; }
+        own_send "sa.urtv.home.FAJR_VOICE --ei voice $voice" > /dev/null || { echo "There is no recording of your own on the TV yet (optimize/music.sh adhan add FILE)." >&2; exit 1; }
+        if [ "$voice" -eq 0 ]; then echo "Fajr voice: your own recording."; else echo "Fajr voice $voice."; fi
+        ;;
+      short)
+        [ $# -eq 2 ] || usage
+        case "$2" in on) flag=true;; off) flag=false;; *) usage;; esac
+        tv "am broadcast -n sa.urtv.home/.tilawah.MusicReceiver -a sa.urtv.home.ADHAN_SHORT --ez on $flag" > /dev/null
+        if [ "$flag" = true ]; then echo "Short adhan on: it stops after its first minute."; else echo "Short adhan off: the whole adhan plays."; fi
         ;;
       volume)
         [ $# -eq 2 ] || usage

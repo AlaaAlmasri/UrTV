@@ -45,7 +45,8 @@ public final class NowPlaying {
         int minutes = until > 0 ? (int) Math.max(1, (until - System.currentTimeMillis() + 59_999) / 60_000) : 0;
         return new State(true, MusicService.isPlaying(), radio,
                 NowPlayingText.title(radio, cat.surahName(MusicService.currentSurah()), stationName),
-                NowPlayingText.sub(radio, reciterName, minutes), NowPlayingText.hint(radio),
+                NowPlayingText.sub(radio, reciterName, minutes, NowPlayingText.note(MusicService.currentError(), MusicService.isBuffering())),
+                NowPlayingText.hint(radio),
                 NowPlayingText.who(radio, reciterName));
     }
 

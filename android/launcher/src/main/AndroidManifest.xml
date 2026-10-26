@@ -191,6 +191,8 @@
                 <action android:name="sa.urtv.home.ADHAN_ON" />
                 <action android:name="sa.urtv.home.ADHAN_OFF" />
                 <action android:name="sa.urtv.home.VOICE" />
+                <action android:name="sa.urtv.home.FAJR_VOICE" />
+                <action android:name="sa.urtv.home.ADHAN_SHORT" />
                 <action android:name="sa.urtv.home.ADHAN_OWN" />
             </intent-filter>
         </receiver>
