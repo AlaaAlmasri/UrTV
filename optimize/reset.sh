@@ -68,6 +68,25 @@ done
 
 echo "4/4 Tweaks back to Android's defaults…"
 optimize/tweaks.sh restore > /dev/null
+# tweaks.sh restore puts Android's defaults; where backup.sh recorded what this TV had (animation scales, the cached-apps
+# freezer, the cached-processes limit), that is put back instead (null: it was never set, so it is deleted)
+if [ -f optimize/run/backup.txt ]; then
+  section() { tr -d '\r' < optimize/run/backup.txt | awk -v want="$1" '/^== /{s=($2==want)} s&&!/^==/{print}'; }
+  { read -r w t a <<< "$(section animation | head -n 3 | paste -sd' ' -)" || true
+    for kv in "window_animation_scale ${w:-}" "transition_animation_scale ${t:-}" "animator_duration_scale ${a:-}"; do
+      read -r key val <<< "$kv"
+      if [ "${val:-}" = null ]; then echo "settings delete global $key"
+      elif [[ "${val:-}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then echo "settings put global $key $val"; fi
+    done
+    cached=$(section cached)
+    if [ "$(wc -l <<< "$cached")" -ge 2 ]; then
+      freezer=$(tail -n 1 <<< "$cached"); limit=$(head -n 1 <<< "$cached")
+      if [ "$freezer" = null ]; then echo "settings delete global cached_apps_freezer"
+      elif [[ "$freezer" =~ ^(enabled|disabled|device_default)$ ]]; then echo "settings put global cached_apps_freezer $freezer"; fi
+      [[ "$limit" =~ ^[0-9]+$ ]] && echo "device_config put activity_manager max_cached_processes $limit" || true
+    fi
+  } | tv --batch > /dev/null
+fi
 [ -d optimize/run ] && mv optimize/run "optimize/run-$(date +%Y%m%d-%H%M%S)"   # keep the old results apart
 
 "$PY" -I optimize/offlist.py clear 2> /dev/null || true   # the apps kept on by request: a reset starts like new

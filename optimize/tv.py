@@ -85,6 +85,12 @@ def tv_name(ident):
     return " ".join(x for x in (ident.get("manufacturer"), ident.get("model")) if x) or "a device that does not say what it is"
 
 
+def unreadable(ident):
+    """An identity with no serial, no make and no model says nothing about which device answered (a TV that has not finished
+    waking up, a shell that returned nothing): comparing it with the saved one would pass."""
+    return not (ident.get("serial") or ident.get("manufacturer") or ident.get("model"))
+
+
 def same_tv(saved, now):
     """Same device? Two serials that both exist must match; and the make and model, where both are known, must match
     (some cheap boxes all carry one placeholder serial). No serial on one side: the make and model decide."""
@@ -122,6 +128,9 @@ def check_identity(out):
     """The device that answered `out` must be the TV the setup started on; the first one seen is saved. Stops with a !!
     line that names both models (never a serial: this line can end up in run.log) when it is not."""
     now = parse_identity(out)
+    if unreadable(now):
+        sys.exit("!! Could not read which TV this is (it gave no serial, make or model), so nothing was changed. Wait a "
+                 "minute, check the TV is awake and on Wi-Fi, then run the same command again.")
     saved = load_identity()
     if saved is None:
         save_identity(now)
@@ -144,7 +153,8 @@ READ_ONLY = ("getprop", "dumpsys", "pm list", "pm path", "pm query-services", "p
              "cmd package list", "device_config get", "appops get", "cmd package query-activities")
 # Commands that read in one form and write in another («wm size 1280x720», «wm density 240», «date -s …» change the TV): only
 # the reading form counts, whatever follows.
-READ_FORMS = (re.compile(r"wm (size|density)\s*$"), re.compile(r"date(\s+-u)?(\s+\+\S*)?\s*$"))
+READ_FORMS = (re.compile(r"wm (size|density)\s*$"), re.compile(r"date(\s+-u)?(\s+\+\S*)?\s*$"),
+              re.compile(r"sed -n\s+\d+p\s*$"))   # «sed -n 1p»: the first line of what came before
 SHELL_WORDS = ("for", "do", "done", "if", "then", "else", "elif", "fi", "while", "{", "}", "!")
 
 
@@ -218,6 +228,17 @@ def signer():
     return PythonRSASigner(open(KEY + ".pub").read(), open(KEY).read())
 
 
+# Commands whose effect must not happen twice: they add or delete by position, or press a key. If the connection drops after
+# the TV ran one, the reply is lost and a blind retry would run it again (a second task, the wrong photo deleted, a key
+# pressed twice). These are sent once; reads and settings (the same value twice is harmless) keep retrying.
+# HOME and WAKEUP twice land where once does: the setup presses them often, on Wi-Fi that drops, so they keep retrying.
+SEND_ONCE = re.compile(r"^\s*input\s(?!keyevent\s+(KEYCODE_)?(HOME|WAKEUP)\s*$)|--es op (add|del|done)\b|-a \S*\.SEEK_BY\b")
+
+
+def send_once(cmd):
+    return bool(SEND_ONCE.search(cmd))
+
+
 class TV:
     """One connection, reopened on failure; every call retried with a growing pause."""
 
@@ -225,6 +246,7 @@ class TV:
         self.dev = None
         self.guard = guard   # this run changes the TV: every new connection first checks it is the right one
         self.tries = tries or TRIES
+        self.last_ok = 0.0
 
     def _open(self):
         self.close()
@@ -232,7 +254,12 @@ class TV:
         dev.connect(rsa_keys=[signer()], auth_timeout_s=120)
         if self.guard:
             try:
-                check_identity(dev.shell(IDENT_CMD, read_timeout_s=30) or "")
+                for look in range(3):   # an empty answer is read again before it counts as unreadable
+                    ident_out = dev.shell(IDENT_CMD, read_timeout_s=30) or ""
+                    if not unreadable(parse_identity(ident_out)):
+                        break
+                    time.sleep(3)
+                check_identity(ident_out)
             except BaseException:   # a refusal (SystemExit) or a dropped connection: this one is not used
                 try:
                     dev.close()
@@ -254,7 +281,9 @@ class TV:
             try:
                 if self.dev is None:
                     self._open()
-                return getattr(self.dev, fn)(*args, **kw)
+                r = getattr(self.dev, fn)(*args, **kw)
+                self.last_ok = time.time()
+                return r
             except Exception as e:  # noqa: BLE001  (network errors come in many types)
                 self.close()
                 if attempt == self.tries - 1:
@@ -265,7 +294,40 @@ class TV:
                 time.sleep(wait)
 
     def shell(self, cmd, timeout=120):
+        if send_once(cmd):
+            return self.once(cmd, timeout)
         return self.call("shell", cmd, read_timeout_s=timeout) or ""
+
+    def once(self, cmd, timeout=120):
+        """Send a command that must not run twice. A connection that may have gone stale is first tested with a harmless
+        command (that one is retried as usual), so the single send meets a live one; if the reply is lost anyway, it is
+        not sent again: the person is told to look first."""
+        if self.dev is None or time.time() - self.last_ok > 15:
+            self.call("shell", "true", read_timeout_s=30)
+        try:
+            r = self.dev.shell(cmd, read_timeout_s=timeout) or ""
+            self.last_ok = time.time()
+            return r
+        except Exception as e:  # noqa: BLE001
+            self.close()
+            sys.exit(f"!! The TV stopped answering while it ran this command ({type(e).__name__}), so it may or may not have "
+                     "been done. It was NOT sent again. Look first (tasks list, photos list, or the TV's screen), then run "
+                     "it again only if it did not happen.")
+
+    def soft(self, cmd, timeout=30, tries=2):
+        """Like shell, but a TV that does not answer gives None instead of ending the run. For looking at a job that is
+        already running on the TV: while it installs a big APK some TVs stop answering ADB for minutes, and that is not a
+        failure. (A refusal by the identity guard still stops.)"""
+        for attempt in range(tries):
+            try:
+                if self.dev is None:
+                    self._open()
+                return self.dev.shell(cmd, read_timeout_s=timeout) or ""
+            except Exception as e:  # noqa: BLE001
+                self.close()
+                if attempt < tries - 1:
+                    time.sleep(backoff(attempt))
+        return None
 
 
 def backoff(attempt):
@@ -312,33 +374,45 @@ def run_bg(tv, name, cmd, progress=None, limit_s=None):
         f"> /dev/null 2>&1 & echo $! > {j}.pid; echo started; fi").strip()
     if started == "joined":
         print(f"   ({name} is already running on the TV: waiting for it)", file=sys.stderr)
-    waited = 0
+    began = time.time()
     limit = LIMIT_S if limit_s is None else limit_s
+    silent = 0   # looks in a row the TV did not answer (it is busy with the job: not a failure)
     while True:
+        waited = int(time.time() - began)
         # alive is checked first: the job writes .rc before it lets go of .pid, so "not alive, no .rc" means it died
-        state = tv.shell(f"if {alive}; then echo running $({progress or 'echo'}); elif [ -f {j}.rc ]; then echo done; "
-                         f"else echo dead; fi").split()
-        if state[:1] == ["done"]:
-            break
-        if state[:1] != ["running"]:
-            # it died with no answer: some TVs end what a shell left running, at once or a few seconds after that shell
-            # closes (a TCL on Android 14 did it after the first look). Do it the old, direct way. Both jobs (decode,
-            # pm install) are safe to run again from the start.
-            print(f"   ({name}: this TV doesn't keep background jobs; running it directly)", file=sys.stderr)
-            tv.shell(f"rm -f {j}.rc {j}.out {j}.pid")
-            out = tv.shell(f"({cmd}) 2>&1; echo __rc=$?", timeout=limit).rstrip()
-            body, _, rc = out.rpartition("__rc=")
-            return (int(rc) if rc.strip().lstrip("-").isdigit() else 1), body.rstrip()
+        got = tv.soft(f"if {alive}; then echo running $({progress or 'echo'}); elif [ -f {j}.rc ]; then echo done; "
+                      f"else echo dead; fi")
+        state = (got or "").split()
+        if got is None:
+            silent += 1
+        else:
+            silent = 0
+            if state[:1] == ["done"]:
+                break
+            if state[:1] != ["running"]:
+                # it died with no answer: some TVs end what a shell left running, at once or a few seconds after that shell
+                # closes (a TCL on Android 14 did it after the first look). Do it the old, direct way. Both jobs (decode,
+                # pm install) are safe to run again from the start.
+                print(f"   ({name}: this TV doesn't keep background jobs; running it directly)", file=sys.stderr)
+                tv.shell(f"rm -f {j}.rc {j}.out {j}.pid")
+                # a command that prints nothing for 60 s fails whatever its read timeout: dots are printed while it runs
+                out = tv.shell(f"({cmd}) 2>&1 & p=$!; while kill -0 $p 2>/dev/null; do echo -n .; sleep 15; done; wait $p; "
+                               "echo __rc=$?", timeout=limit).rstrip()
+                body, _, rc = out.rpartition("__rc=")
+                body = re.sub(r"^\.+", "", body)
+                return (int(rc) if rc.strip().lstrip("-").isdigit() else 1), body.rstrip()
         if waited >= limit:
-            sys.exit(f"!! The {name} job on the TV is still running after {limit // 60} minutes. It is left running there: "
-                     "run the same command again to wait for it.")
+            sys.exit(f"!! The {name} job on the TV is still running after {limit // 60} minutes"
+                     + (" and the TV has stopped answering" if silent else "")
+                     + ". It is left running there: run the same command again to wait for it.")
         shown = f"{waited}s"
         if progress and len(state) > 1 and state[1].isdigit():
             shown = f"{state[1]}%"
+        if silent:
+            shown += " (the TV is busy and not answering yet)"
         print(f"\r   {name}: {shown}   ", end="", file=sys.stderr, flush=True)
         time.sleep(POLL_S)
-        waited += POLL_S
-    if waited:
+    if time.time() - began > POLL_S:
         print(file=sys.stderr)
     rc = tv.shell(f"cat {j}.rc").strip()
     out = tv.shell(f"cat {j}.out").rstrip()
@@ -396,7 +470,10 @@ def push_b64(tv, local, remote, chunk=None):   # one argument may not exceed 128
             tv.shell(f"rm -f {remote}.part")
             sys.exit(f"!! The decode on the TV failed (exit {rc}: {out or 'no message'}). Run the same command again.")
         tv.shell(f"[ -f {remote}.part ] && mv {remote}.part {remote}; rm -f {tmp}")   # safe to repeat if the reply is lost
-    remote_md5 = tv.shell(f"md5sum {remote}").split()[0] if tv.shell(f"[ -f {remote} ] && echo y").strip() else ""
+    remote_md5 = ""   # md5sum of a big APK prints nothing for over a minute on a weak TV: a background job, like the decode
+    if tv.shell(f"[ -f {remote} ] && echo y").strip():
+        rc, out = run_bg(tv, "md5", f"md5sum {remote}")
+        remote_md5 = out.split()[0] if rc == 0 and out.split() else ""
     local_md5 = hashlib.md5(data).hexdigest()
     if remote_md5 != local_md5:
         tv.shell(f"rm -f {remote} {tmp}")
@@ -486,6 +563,8 @@ def main():
     if a == ["--new-tv"]:
         tv = TV()
         ident = parse_identity(tv.shell(IDENT_CMD))
+        if unreadable(ident):
+            sys.exit("!! Could not read which TV this is (it gave no serial, make or model): nothing was saved. Run it again in a minute.")
         save_identity(ident)
         print(f"Working on this TV from now on: {tv_name(ident)}")
         tv.close()
@@ -505,15 +584,20 @@ def main():
         for p in ("ro.product.manufacturer", "ro.product.brand", "ro.product.model", "ro.product.device",
                   "ro.build.version.release", "ro.build.version.sdk", "ro.build.display.id"):
             print(f"{p} = {tv.shell(f'getprop {p}').strip()}")
-        if load_identity() is None:   # the first TV seen is the one the setup is for
-            save_identity(parse_identity(tv.shell(IDENT_CMD)))
+        if load_identity() is None:   # the first TV seen is the one the setup is for (never an unreadable answer)
+            first = parse_identity(tv.shell(IDENT_CMD))
+            if not unreadable(first):
+                save_identity(first)
     elif a[0] == "--batch":
         for line in batch:
             print(f"$ {line}\n{tv.shell(line).rstrip()}")
     elif a[0] == "--pull":
         tv.call("pull", tv_path(a[1]), a[2])
-    elif a[0] == "--bg":   # prints the command's own output; the exit code stays on the TV side
-        print(run_bg(tv, a[1], shell_line(a[2:]))[1])
+    elif a[0] == "--bg":   # prints the command's own output and exits with the command's own exit code
+        code, out = run_bg(tv, a[1], shell_line(a[2:]))
+        print(out)
+        tv.close()
+        sys.exit(code)
     elif a[0] == "--push-b64":
         push_b64(tv, a[1], tv_path(a[2]))
     elif a[0] == "--shot":

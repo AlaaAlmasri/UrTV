@@ -18,6 +18,8 @@ if ! venv/bin/python -m pip install -q --no-cache-dir -r requirements.txt; then
   echo "   error, allow this terminal network access (pypi.org), then run optimize/setup.sh again."
   exit 1
 fi
+# iPhone/Samsung HEIC photos for photos.sh: optional, so a computer with no wheel for it still gets everything else
+venv/bin/python -m pip install -q --no-cache-dir pillow-heif > /dev/null 2>&1 || echo "(HEIC photos won't be readable here: photos.sh takes JPEG, PNG, WebP, GIF and BMP)"
 # every `venv/bin/python -I` call verifies TLS with certifi (python.org's macOS Python ships no CA certificates)
 for sp in venv/lib/python3.*/site-packages venv/Lib/site-packages; do
   [ -d "$sp" ] || continue
