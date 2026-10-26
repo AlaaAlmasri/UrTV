@@ -1768,12 +1768,16 @@ for (const [width, height] of [[1920, 1080], [1280, 720], [960, 540]]) {
       r.blocks.length === 9 && r.pages >= 5 && r.pages <= 8, JSON.stringify(r.blocks));
     check(`${tag}: each game on one line, nothing cut with «…», nothing off screen`,
       !r.bad.length && !r.blocks.join('').includes('…'), r.bad.join(' | '));
-    check(`${tag}: the live score is the file's until lookupevent answers; the finished game shows its score`,
-      r.blocks.some(b => b.includes('١ - ٠')) && r.blocks.some(b => b.includes('٢ - ١')), r.blocks.join(' | '));
+    // the fixtures' load asks for the live game at once, so the first render already carries the looked-up score (2 - 0), not the file's (1 - 0)
+    const first = asked.filter(u => /lookupevent/.test(u));
+    check(`${tag}: right after the fixtures load exactly one lookup is made, for the one game under way`,
+      first.length === 1 && /id=L1/.test(first[0]), first.join(','));
+    check(`${tag}: the live game shows the looked-up score, the finished game its score`,
+      r.blocks.some(b => b.includes('٢ - ٠')) && !r.blocks.some(b => b.includes('١ - ٠')) && r.blocks.some(b => b.includes('٢ - ١')), r.blocks.join(' | '));
     check(`${tag}: the card lists the same 9 games, one line each, titled «المباريات»`,
       r.rows === 9 && r.card.length === 9 && !r.cut.length && r.title === 'المباريات', JSON.stringify({ rows: r.rows, cut: r.cut, t: r.title }));
     check(`${tag}: games in time order (result, live, then the followed club's, then the rest)`,
-      r.card.length === 9 && r.card[0].includes('٢ - ١') && r.card[1].includes('١ - ٠') && r.card[2].startsWith('الهلال'), r.card.join(' | '));
+      r.card.length === 9 && r.card[0].includes('٢ - ١') && r.card[1].includes('٢ - ٠') && r.card[2].startsWith('الهلال'), r.card.join(' | '));
     check(`${tag}: ${r.pages} pages turn every ${r.turn / 1000} s (the round passes in ${r.pages * r.turn / 1000} s, under a minute and a half)`,
       r.turn === 10000 && r.pages * r.turn <= 90000, r.turn);
     // a game under way is refreshed on its own: one lookup, the followed club's game (3 h away) is not asked
